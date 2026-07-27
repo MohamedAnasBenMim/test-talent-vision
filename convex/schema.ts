@@ -29,4 +29,15 @@ export default defineSchema({
     interviewerId: v.string(),
     interviewId: v.id("interviews"),
   }).index("by_interview_id", ["interviewId"]),
+
+  codeSessions: defineTable({
+    streamCallId: v.string(),
+    interviewId: v.optional(v.id("interviews")),
+    candidateId: v.optional(v.string()),
+    code: v.string(),
+    language: v.string(),
+    questionId: v.string(),
+    updatedAt: v.number(),
+    updatedBy: v.string(),
+  }).index("by_stream_call_id", ["streamCallId"]),
 });

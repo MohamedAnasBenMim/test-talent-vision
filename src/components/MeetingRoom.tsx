@@ -19,12 +19,14 @@ import {
 import { Button } from "./ui/button";
 import EndCallButton from "./EndCallButton";
 import CodeEditor from "./CodeEditor";
+import { useUserRole } from "@/hooks/useUserRole";
 
 function MeetingRoom() {
   const router = useRouter();
   const [layout, setLayout] = useState<"grid" | "speaker">("speaker");
   const [showParticipants, setShowParticipants] = useState(false);
   const { useCallCallingState } = useCallStateHooks();
+  const { isInterviewer } = useUserRole();
 
   const callingState = useCallCallingState();
 
@@ -39,7 +41,12 @@ function MeetingRoom() {
   return (
     <div className="h-[calc(100vh-4rem-1px)]">
       <ResizablePanelGroup direction="horizontal">
-        <ResizablePanel defaultSize={35} minSize={25} maxSize={100} className="relative">
+        <ResizablePanel
+          defaultSize={isInterviewer ? 48 : 35}
+          minSize={30}
+          maxSize={isInterviewer ? 70 : 100}
+          className="relative"
+        >
           {/* VIDEO LAYOUT */}
           <div className="absolute inset-0">
             {layout === "grid" ? <PaginatedGridLayout /> : <SpeakerLayout />}
@@ -94,7 +101,7 @@ function MeetingRoom() {
 
         <ResizableHandle withHandle />
 
-        <ResizablePanel defaultSize={65} minSize={25}>
+        <ResizablePanel defaultSize={isInterviewer ? 52 : 65} minSize={30}>
           <CodeEditor />
         </ResizablePanel>
       </ResizablePanelGroup>

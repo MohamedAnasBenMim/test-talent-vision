@@ -7,20 +7,34 @@ import { Button } from "./ui/button";
 
 function MeetingSetup({ onSetupComplete }: { onSetupComplete: () => void }) {
   const [isCameraDisabled, setIsCameraDisabled] = useState(true);
-  const [isMicDisabled, setIsMicDisabled] = useState(false);
+  const [isMicDisabled, setIsMicDisabled] = useState(true);
 
   const call = useCall();
 
   if (!call) return null;
 
   useEffect(() => {
-    if (isCameraDisabled) call.camera.disable();
-    else call.camera.enable();
+    if (isCameraDisabled) {
+      call.camera.disable();
+      return;
+    }
+
+    call.camera.enable().catch((error) => {
+      console.error("Camera permission was not granted:", error);
+      setIsCameraDisabled(true);
+    });
   }, [isCameraDisabled, call.camera]);
 
   useEffect(() => {
-    if (isMicDisabled) call.microphone.disable();
-    else call.microphone.enable();
+    if (isMicDisabled) {
+      call.microphone.disable();
+      return;
+    }
+
+    call.microphone.enable().catch((error) => {
+      console.error("Microphone permission was not granted:", error);
+      setIsMicDisabled(true);
+    });
   }, [isMicDisabled, call.microphone]);
 
   const handleJoin = async () => {
