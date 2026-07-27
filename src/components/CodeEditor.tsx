@@ -4,24 +4,43 @@ import { ResizableHandle, ResizablePanel, ResizablePanelGroup } from "./ui/resiz
 import { ScrollArea, ScrollBar } from "./ui/scroll-area";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
 import { Card, CardContent, CardHeader, CardTitle } from "./ui/card";
-import { AlertCircleIcon, BookIcon, EyeIcon, LightbulbIcon, PencilIcon } from "lucide-react";
+import { Button } from "./ui/button";
+import {
+  AlertCircleIcon,
+  BookIcon,
+  CheckCircle2Icon,
+  ClockIcon,
+  EyeIcon,
+  LightbulbIcon,
+  PencilIcon,
+  SendIcon,
+  XCircleIcon,
+} from "lucide-react";
 import Editor from "@monaco-editor/react";
 import { useUser } from "@clerk/nextjs";
 import { useCall } from "@stream-io/video-react-sdk";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import { useUserRole } from "@/hooks/useUserRole";
+import toast from "react-hot-toast";
 
 function isLanguageId(language: string): language is LanguageId {
   return LANGUAGES.some((item) => item.id === language);
 }
 
-const INTERVIEW_DURATION_MS = 60 * 60 * 1000;
+const PROBLEM_DURATION_MS = 10 * 60 * 1000;
+
+type SubmissionResult = {
+  status: "accepted" | "wrong";
+  message: string;
+  expected: string;
+  received?: string;
+};
 
 function formatTimeRemaining(startTime?: number, now = Date.now()) {
   if (!startTime) return "Not scheduled";
 
-  const endTime = startTime + INTERVIEW_DURATION_MS;
+  const endTime = startTime + PROBLEM_DURATION_MS;
   const remainingMs = Math.max(0, endTime - now);
   const totalSeconds = Math.floor(remainingMs / 1000);
   const minutes = Math.floor(totalSeconds / 60);
@@ -30,6 +49,109 @@ function formatTimeRemaining(startTime?: number, now = Date.now()) {
   if (remainingMs === 0) return "Time ended";
 
   return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
+function readStringLiterals(source: string) {
+  const literals: string[] = [];
+  const regex = /(["'`])((?:\\.|(?!\1)[\s\S])*)\1/g;
+  let match: RegExpExecArray | null;
+
+  while ((match = regex.exec(source)) !== null) {
+    literals.push(
+      match[2]
+        .replace(/\\n/g, "\n")
+        .replace(/\\t/g, "\t")
+        .replace(/\\"/g, '"')
+        .replace(/\\'/g, "'")
+        .replace(/\\\\/g, "\\")
+    );
+  }
+
+  return literals;
+}
+
+function extractPrintedOutput(source: string, language: LanguageId) {
+  const outputParts: string[] = [];
+  const patterns: Partial<Record<LanguageId, RegExp[]>> = {
+    javascript: [
+      /\bconsole\.log\s*\(([^)]*)\)/g,
+      /\bprocess\.stdout\.write\s*\(([^)]*)\)/g,
+      /\bdocument\.write\s*\(([^)]*)\)/g,
+    ],
+    python: [/\bprint\s*\(([^)]*)\)/g],
+    java: [/\bSystem\.out\.print(?:ln)?\s*\(([^)]*)\)/g],
+    cpp: [/(?:std::)?cout\s*<<([^;]+)/g],
+  };
+
+  for (const pattern of patterns[language] ?? []) {
+    let match: RegExpExecArray | null;
+
+    while ((match = pattern.exec(source)) !== null) {
+      outputParts.push(...readStringLiterals(match[1]));
+    }
+  }
+
+  return outputParts.join("");
+}
+
+function findSyntaxIssue(source: string, language: LanguageId) {
+  if (language !== "cpp" && language !== "java") return null;
+
+  const lines = source.split("\n");
+
+  for (const line of lines) {
+    const statement = line.split("//")[0].trim();
+    const hasPrintStatement =
+      language === "cpp"
+        ? /\b(?:std::)?cout\s*<</.test(statement)
+        : /\bSystem\.out\.print(?:ln)?\s*\(/.test(statement);
+
+    if (hasPrintStatement && !statement.endsWith(";")) {
+      return "Compilation Error: missing semicolon after the print statement.";
+    }
+  }
+
+  return null;
+}
+
+function judgeSubmission(source: string, language: LanguageId, expected: string): SubmissionResult {
+  if (!source.trim()) {
+    return {
+      status: "wrong",
+      message: "Wrong Answer: your editor is empty.",
+      expected,
+    };
+  }
+
+  const syntaxIssue = findSyntaxIssue(source, language);
+
+  if (syntaxIssue) {
+    return {
+      status: "wrong",
+      message: syntaxIssue,
+      expected,
+    };
+  }
+
+  const received = extractPrintedOutput(source, language).trimEnd();
+
+  if (received === expected) {
+    return {
+      status: "accepted",
+      message: "Accepted: output matches the expected result.",
+      expected,
+      received,
+    };
+  }
+
+  return {
+    status: "wrong",
+    message: received
+      ? "Wrong Answer: the printed output does not match."
+      : "Wrong Answer: no printable output was detected.",
+    expected,
+    received: received || undefined,
+  };
 }
 
 function CodeEditor() {
@@ -50,8 +172,11 @@ function CodeEditor() {
   const [language, setLanguage] = useState<LanguageId>(LANGUAGES[0].id);
   const [code, setCode] = useState(selectedQuestion.starterCode[language]);
   const [now, setNow] = useState(Date.now());
+  const [problemStartedAt] = useState(() => Date.now());
+  const [submissionResult, setSubmissionResult] = useState<SubmissionResult | null>(null);
   const hasLoadedSharedSession = useRef(false);
-  const timeRemaining = formatTimeRemaining(interview?.startTime, now);
+  const timerStartTime = interview?.startTime ?? problemStartedAt;
+  const timeRemaining = formatTimeRemaining(timerStartTime, now);
   const starterCode = selectedQuestion.starterCode[language];
   const hasCandidateInput = code.trim() !== "" && code.trim() !== starterCode.trim();
   const reviewerCode = hasCandidateInput ? code : "";
@@ -69,6 +194,7 @@ function CodeEditor() {
     const question = CODING_QUESTIONS.find((q) => q.id === questionId)!;
     setSelectedQuestion(question);
     setCode(question.starterCode[language]);
+    setSubmissionResult(null);
   };
 
   const handleLanguageChange = (newLanguage: LanguageId) => {
@@ -76,6 +202,21 @@ function CodeEditor() {
 
     setLanguage(newLanguage);
     setCode(selectedQuestion.starterCode[newLanguage]);
+    setSubmissionResult(null);
+  };
+
+  const handleSubmit = () => {
+    if (!canEdit) return;
+
+    const expected = selectedQuestion.examples[0]?.output ?? "";
+    const result = judgeSubmission(code, language, expected);
+    setSubmissionResult(result);
+
+    if (result.status === "accepted") {
+      toast.success("Accepted");
+    } else {
+      toast.error("Wrong Answer");
+    }
   };
 
   useEffect(() => {
@@ -162,8 +303,11 @@ function CodeEditor() {
             <p className="mt-1 font-semibold">{selectedQuestion.title}</p>
           </div>
           <div className="rounded-lg border border-border/70 bg-card/60 p-3">
-            <p className="text-xs text-muted-foreground">Time remaining</p>
-            <p className="mt-1 font-semibold text-primary">{timeRemaining}</p>
+            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
+              <ClockIcon className="size-3.5" />
+              Time remaining
+            </p>
+            <p className="mt-1 font-mono text-lg font-semibold text-primary">{timeRemaining}</p>
           </div>
           <div className="rounded-lg border border-border/70 bg-card/60 p-3">
             <p className="text-xs text-muted-foreground">Sync status</p>
@@ -234,8 +378,9 @@ function CodeEditor() {
                     {canEdit ? "Candidate editing" : "Interviewer viewing"}
                   </div>
                   <div className="inline-flex items-center gap-2 rounded-md border border-border/70 bg-background/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
+                    <ClockIcon className="size-4 text-primary" />
                     Time remaining
-                    <span className="text-primary">{timeRemaining}</span>
+                    <span className="font-mono text-sm text-primary">{timeRemaining}</span>
                   </div>
                 </div>
                 <div className="flex items-center gap-3">
@@ -276,6 +421,13 @@ function CodeEditor() {
                       ))}
                     </SelectContent>
                   </Select>
+
+                  {canEdit && (
+                    <Button className="gap-2" onClick={handleSubmit}>
+                      <SendIcon className="size-4" />
+                      Submit
+                    </Button>
+                  )}
                 </div>
               </div>
 
@@ -342,6 +494,48 @@ function CodeEditor() {
                   </CardContent>
                 </Card>
               )}
+
+              {canEdit && submissionResult && (
+                <Card
+                  className={
+                    submissionResult.status === "accepted"
+                      ? "border-emerald-500/50 bg-emerald-500/10"
+                      : "border-destructive/50 bg-destructive/10"
+                  }
+                >
+                  <CardHeader className="flex flex-row items-center gap-2">
+                    {submissionResult.status === "accepted" ? (
+                      <CheckCircle2Icon className="h-5 w-5 text-emerald-400" />
+                    ) : (
+                      <XCircleIcon className="h-5 w-5 text-destructive" />
+                    )}
+                    <CardTitle>
+                      {submissionResult.status === "accepted" ? "Accepted" : "Wrong Answer"}
+                    </CardTitle>
+                  </CardHeader>
+                  <CardContent className="space-y-2 text-sm">
+                    <p className="text-muted-foreground">{submissionResult.message}</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="rounded-md border border-border/70 bg-background/60 p-3">
+                        <p className="text-xs font-semibold uppercase text-muted-foreground">
+                          Expected
+                        </p>
+                        <pre className="mt-1 whitespace-pre-wrap font-mono">
+                          {submissionResult.expected}
+                        </pre>
+                      </div>
+                      <div className="rounded-md border border-border/70 bg-background/60 p-3">
+                        <p className="text-xs font-semibold uppercase text-muted-foreground">
+                          Received
+                        </p>
+                        <pre className="mt-1 whitespace-pre-wrap font-mono">
+                          {submissionResult.received ?? "No output detected"}
+                        </pre>
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
             </div>
           </div>
           <ScrollBar />
@@ -362,6 +556,7 @@ function CodeEditor() {
             onChange={(value) => {
               if (!canEdit) return;
               setCode(value || "");
+              setSubmissionResult(null);
             }}
             options={{
               readOnly: !canEdit,

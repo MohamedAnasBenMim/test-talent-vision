@@ -61,13 +61,13 @@ export const QUICK_ACTIONS = [
 export const CODING_QUESTIONS: CodeQuestion[] = [
   {
     id: "hello-world",
-    title: "Hello Wold",
+    title: "Hello World",
     description:
-      'Write a program that displays the message "Hello Wold !".',
+      'Write a program that displays the message "Hello World !".',
     examples: [
       {
         input: "No input",
-        output: "Hello Wold !",
+        output: "Hello World !",
       },
     ],
     starterCode: {
@@ -79,13 +79,14 @@ export const CODING_QUESTIONS: CodeQuestion[] = [
     }
 }`,
       cpp: `#include <iostream>
+using namespace std;
 
 int main() {
     // Write your code here
     return 0;
 }`,
     },
-    constraints: ["The output must match exactly: Hello Wold !"],
+    constraints: ["The output must match exactly: Hello World !"],
   },
 ];
 

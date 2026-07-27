@@ -2,8 +2,14 @@ import {
   CallControls,
   CallingState,
   CallParticipantsList,
+  CancelCallButton,
   PaginatedGridLayout,
+  ReactionsButton,
+  ScreenShareButton,
   SpeakerLayout,
+  SpeakingWhileMutedNotification,
+  ToggleAudioPublishingButton,
+  ToggleVideoPublishingButton,
   useCallStateHooks,
 } from "@stream-io/video-react-sdk";
 import { LayoutListIcon, LoaderIcon, UsersIcon } from "lucide-react";
@@ -26,7 +32,7 @@ function MeetingRoom() {
   const [layout, setLayout] = useState<"grid" | "speaker">("speaker");
   const [showParticipants, setShowParticipants] = useState(false);
   const { useCallCallingState } = useCallStateHooks();
-  const { isInterviewer } = useUserRole();
+  const { isCandidate, isInterviewer } = useUserRole();
 
   const callingState = useCallCallingState();
 
@@ -64,7 +70,11 @@ function MeetingRoom() {
           <div className="absolute bottom-4 left-0 right-0">
             <div className="flex flex-col items-center gap-4">
               <div className="flex items-center gap-2 flex-wrap justify-center px-4">
-                <CallControls onLeave={() => router.push("/")} />
+                {isCandidate ? (
+                  <CandidateCallControls onLeave={() => router.push("/")} />
+                ) : (
+                  <CallControls onLeave={() => router.push("/")} />
+                )}
 
                 <div className="flex items-center gap-2">
                   <DropdownMenu>
@@ -108,4 +118,19 @@ function MeetingRoom() {
     </div>
   );
 }
+
+function CandidateCallControls({ onLeave }: { onLeave: () => void }) {
+  return (
+    <div className="str-video__call-controls">
+      <SpeakingWhileMutedNotification>
+        <ToggleAudioPublishingButton />
+      </SpeakingWhileMutedNotification>
+      <ToggleVideoPublishingButton />
+      <ReactionsButton />
+      <ScreenShareButton />
+      <CancelCallButton onLeave={onLeave} />
+    </div>
+  );
+}
+
 export default MeetingRoom;
