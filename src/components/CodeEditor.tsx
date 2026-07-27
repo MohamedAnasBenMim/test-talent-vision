@@ -16,6 +16,22 @@ function isLanguageId(language: string): language is LanguageId {
   return LANGUAGES.some((item) => item.id === language);
 }
 
+const INTERVIEW_DURATION_MS = 60 * 60 * 1000;
+
+function formatTimeRemaining(startTime?: number, now = Date.now()) {
+  if (!startTime) return "Not scheduled";
+
+  const endTime = startTime + INTERVIEW_DURATION_MS;
+  const remainingMs = Math.max(0, endTime - now);
+  const totalSeconds = Math.floor(remainingMs / 1000);
+  const minutes = Math.floor(totalSeconds / 60);
+  const seconds = totalSeconds % 60;
+
+  if (remainingMs === 0) return "Time ended";
+
+  return `${String(minutes).padStart(2, "0")}:${String(seconds).padStart(2, "0")}`;
+}
+
 function CodeEditor() {
   const call = useCall();
   const { user } = useUser();
@@ -33,7 +49,12 @@ function CodeEditor() {
   const [selectedQuestion, setSelectedQuestion] = useState(CODING_QUESTIONS[0]);
   const [language, setLanguage] = useState<LanguageId>(LANGUAGES[0].id);
   const [code, setCode] = useState(selectedQuestion.starterCode[language]);
+  const [now, setNow] = useState(Date.now());
   const hasLoadedSharedSession = useRef(false);
+  const timeRemaining = formatTimeRemaining(interview?.startTime, now);
+  const starterCode = selectedQuestion.starterCode[language];
+  const hasCandidateInput = code.trim() !== "" && code.trim() !== starterCode.trim();
+  const reviewerCode = hasCandidateInput ? code : "";
 
   const canEdit =
     Boolean(user?.id) &&
@@ -80,6 +101,7 @@ function CodeEditor() {
 
   useEffect(() => {
     if (!canEdit || !streamCallId || sharedSession === undefined) return;
+    if (!sharedSession && code.trim() === selectedQuestion.starterCode[language].trim()) return;
 
     const timeout = window.setTimeout(() => {
       void upsertCodeSession({
@@ -104,6 +126,11 @@ function CodeEditor() {
     streamCallId,
     upsertCodeSession,
   ]);
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   if (isReviewerView) {
     return (
@@ -135,29 +162,36 @@ function CodeEditor() {
             <p className="mt-1 font-semibold">{selectedQuestion.title}</p>
           </div>
           <div className="rounded-lg border border-border/70 bg-card/60 p-3">
-            <p className="text-xs text-muted-foreground">Last update</p>
-            <p className="mt-1 font-semibold">
-              {sharedSession ? new Date(sharedSession.updatedAt).toLocaleTimeString() : "Waiting"}
-            </p>
+            <p className="text-xs text-muted-foreground">Time remaining</p>
+            <p className="mt-1 font-semibold text-primary">{timeRemaining}</p>
           </div>
           <div className="rounded-lg border border-border/70 bg-card/60 p-3">
             <p className="text-xs text-muted-foreground">Sync status</p>
             <p className="mt-1 font-semibold text-accent">
-              {sharedSession ? "Receiving code" : "Waiting for candidate"}
+              {hasCandidateInput ? "Receiving code" : "Waiting for candidate input"}
             </p>
           </div>
         </div>
 
-        <div className="min-h-0 flex-1">
+        <div className="relative min-h-0 flex-1">
+          {!hasCandidateInput && (
+            <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center">
+              <div className="rounded-lg border border-border/70 bg-background/85 px-5 py-4 text-center shadow-lg shadow-black/20 backdrop-blur">
+                <p className="font-semibold">Waiting for candidate input</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Code will appear here once the candidate starts writing.
+                </p>
+              </div>
+            </div>
+          )}
           <Editor
             height="100%"
             defaultLanguage={language}
             language={language}
             theme="vs-dark"
-            value={code}
+            value={reviewerCode}
             options={{
               readOnly: true,
-              readOnlyMessage: { value: "The interviewer view is read-only." },
               minimap: { enabled: true },
               fontSize: 18,
               lineNumbers: "on",
@@ -194,9 +228,15 @@ function CodeEditor() {
                       : "Live read-only view of the candidate workspace"}
                   </p>
                 </div>
-                <div className="inline-flex items-center gap-2 rounded-md border border-border/70 bg-background/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
-                  {canEdit ? <PencilIcon className="size-4 text-primary" /> : <EyeIcon className="size-4 text-accent" />}
-                  {canEdit ? "Candidate editing" : "Interviewer viewing"}
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex items-center gap-2 rounded-md border border-border/70 bg-background/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
+                    {canEdit ? <PencilIcon className="size-4 text-primary" /> : <EyeIcon className="size-4 text-accent" />}
+                    {canEdit ? "Candidate editing" : "Interviewer viewing"}
+                  </div>
+                  <div className="inline-flex items-center gap-2 rounded-md border border-border/70 bg-background/60 px-3 py-2 text-xs font-semibold text-muted-foreground">
+                    Time remaining
+                    <span className="text-primary">{timeRemaining}</span>
+                  </div>
                 </div>
                 <div className="flex items-center gap-3">
                   <Select
@@ -325,7 +365,6 @@ function CodeEditor() {
             }}
             options={{
               readOnly: !canEdit,
-              readOnlyMessage: { value: "The interviewer view is read-only." },
               minimap: { enabled: false },
               fontSize: 18,
               lineNumbers: "on",
