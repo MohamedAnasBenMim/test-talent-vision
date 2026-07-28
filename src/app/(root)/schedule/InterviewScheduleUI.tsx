@@ -2,6 +2,7 @@ import { useUser } from "@clerk/nextjs";
 import { useStreamVideoClient } from "@stream-io/video-react-sdk";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
+import { sendInterviewInvite } from "@/actions/invite.actions";
 import { api } from "../../../../convex/_generated/api";
 import toast from "react-hot-toast";
 import {
@@ -74,6 +75,13 @@ function InterviewScheduleUI() {
 
     try {
       const { title, description, date, time, candidateId, interviewerIds } = formData;
+      const candidate = candidates.find((item) => item.clerkId === candidateId);
+
+      if (!candidate) {
+        toast.error("Selected candidate was not found");
+        return;
+      }
+
       const [hours, minutes] = time.split(":");
       const meetingDate = new Date(date);
       meetingDate.setHours(parseInt(hours), parseInt(minutes), 0);
@@ -101,8 +109,28 @@ function InterviewScheduleUI() {
         interviewerIds,
       });
 
+      const meetingUrl = `${window.location.origin}/meeting/${id}`;
+
+      try {
+        await sendInterviewInvite({
+          candidateEmail: candidate.email,
+          candidateName: candidate.name,
+          interviewTitle: title,
+          interviewDescription: description,
+          startTime: meetingDate.getTime(),
+          meetingUrl,
+        });
+        toast.success("Meeting scheduled and invitation email sent!");
+      } catch (emailError) {
+        console.error(emailError);
+        const errorMessage =
+          emailError instanceof Error
+            ? emailError.message
+            : "Meeting scheduled, but invitation email was not sent.";
+        toast.error(errorMessage);
+      }
+
       setOpen(false);
-      toast.success("Meeting scheduled successfully!");
 
       setFormData({
         title: "",

@@ -4,13 +4,13 @@ import ActionCard from "@/components/ActionCard";
 import { QUICK_ACTIONS } from "@/constants";
 import { useUserRole } from "@/hooks/useUserRole";
 import { useQuery } from "convex/react";
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { api } from "../../../../convex/_generated/api";
 import { useRouter } from "next/navigation";
 import MeetingModal from "@/components/MeetingModal";
 import LoaderUI from "@/components/LoaderUI";
-import { Loader2Icon } from "lucide-react";
-import MeetingCard from "@/components/MeetingCard";
+import { CalendarXIcon } from "lucide-react";
+import { getMeetingStatus } from "@/lib/utils";
 
 export default function Home() {
   const router = useRouter();
@@ -19,6 +19,24 @@ export default function Home() {
   const interviews = useQuery(api.interviews.getMyInterviews);
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState<"start" | "join">();
+  const candidateNextInterview = useMemo(() => {
+    if (!isCandidate || !interviews) return undefined;
+
+    const now = new Date();
+
+    return interviews
+      .filter((interview) => {
+        const status = getMeetingStatus(interview, now);
+        return status === "live" || status === "upcoming";
+      })
+      .sort((a, b) => a.startTime - b.startTime)[0];
+  }, [interviews, isCandidate]);
+
+  useEffect(() => {
+    if (!isCandidate || !candidateNextInterview) return;
+
+    router.replace(`/meeting/${candidateNextInterview.streamCallId}`);
+  }, [candidateNextInterview, isCandidate, router]);
 
   const handleQuickAction = (title: string) => {
     switch (title) {
@@ -42,6 +60,25 @@ export default function Home() {
   };
 
   if (isLoading) return <LoaderUI />;
+
+  if (isCandidate) {
+    if (interviews === undefined || candidateNextInterview) return <LoaderUI />;
+
+    return (
+      <div className="container mx-auto flex min-h-[calc(100vh-4rem)] max-w-3xl items-center justify-center p-6">
+        <section className="w-full rounded-lg border border-border/70 bg-card/80 p-8 text-center shadow-sm shadow-black/20">
+          <div className="mx-auto flex size-14 items-center justify-center rounded-md border border-primary/25 bg-primary/10">
+            <CalendarXIcon className="size-7 text-primary" />
+          </div>
+          <h1 className="mt-5 text-2xl font-bold tracking-tight">No Interview Invitation</h1>
+          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+            You do not have an upcoming technical interview yet. When an interviewer sends you an
+            invitation link, open it and you will be taken directly to the interview entry page.
+          </p>
+        </section>
+      </div>
+    );
+  }
 
   return (
     <div className="container mx-auto max-w-7xl p-4 sm:p-6">
@@ -76,53 +113,22 @@ export default function Home() {
         <div className="h-1 bg-gradient-to-r from-primary via-accent to-fuchsia-400" />
       </section>
 
-      {isInterviewer ? (
-        <>
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
-            {QUICK_ACTIONS.map((action) => (
-              <ActionCard
-                key={action.title}
-                action={action}
-                onClick={() => handleQuickAction(action.title)}
-              />
-            ))}
-          </div>
-
-          <MeetingModal
-            isOpen={showModal}
-            onClose={() => setShowModal(false)}
-            title={modalType === "join" ? "Join Meeting" : "Start Meeting"}
-            isJoinMeeting={modalType === "join"}
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-6">
+        {QUICK_ACTIONS.map((action) => (
+          <ActionCard
+            key={action.title}
+            action={action}
+            onClick={() => handleQuickAction(action.title)}
           />
-        </>
-      ) : (
-        <>
-          <div className="mb-6">
-            <h2 className="text-2xl font-bold tracking-tight">Your Interviews</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              View and join your scheduled interviews
-            </p>
-          </div>
+        ))}
+      </div>
 
-          <div className="mt-8">
-            {interviews === undefined ? (
-              <div className="flex justify-center py-12">
-                <Loader2Icon className="h-8 w-8 animate-spin text-muted-foreground" />
-              </div>
-            ) : interviews.length > 0 ? (
-              <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
-                {interviews.map((interview) => (
-                  <MeetingCard key={interview._id} interview={interview} />
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-12 text-muted-foreground">
-                You have no scheduled interviews at the moment
-              </div>
-            )}
-          </div>
-        </>
-      )}
+      <MeetingModal
+        isOpen={showModal}
+        onClose={() => setShowModal(false)}
+        title={modalType === "join" ? "Join Meeting" : "Start Meeting"}
+        isJoinMeeting={modalType === "join"}
+      />
     </div>
   );
 }

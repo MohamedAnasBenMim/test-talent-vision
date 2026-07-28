@@ -5,16 +5,18 @@ import { api } from "../../../../convex/_generated/api";
 import { Doc, Id } from "../../../../convex/_generated/dataModel";
 import toast from "react-hot-toast";
 import LoaderUI from "@/components/LoaderUI";
-import { getCandidateInfo, groupInterviews } from "@/lib/utils";
+import { getCandidateInfo, getMeetingStatus, groupInterviews } from "@/lib/utils";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { INTERVIEW_CATEGORY } from "@/constants";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { CalendarIcon, CheckCircle2Icon, ClockIcon, XCircleIcon } from "lucide-react";
+import { CalendarIcon, CheckCircle2Icon, ClockIcon, VideoIcon, XCircleIcon } from "lucide-react";
 import { format } from "date-fns";
 import CommentDialog from "@/components/CommentDialog";
+import useMeetingActions from "@/hooks/useMeetingActions";
+import { useEffect, useState } from "react";
 
 type Interview = Doc<"interviews">;
 
@@ -22,6 +24,13 @@ function DashboardPage() {
   const users = useQuery(api.users.getUsers);
   const interviews = useQuery(api.interviews.getAllInterviews);
   const updateStatus = useMutation(api.interviews.updateInterviewStatus);
+  const { joinMeeting } = useMeetingActions();
+  const [now, setNow] = useState(Date.now());
+
+  useEffect(() => {
+    const interval = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(interval);
+  }, []);
 
   const handleStatusUpdate = async (interviewId: Id<"interviews">, status: string) => {
     try {
@@ -68,6 +77,7 @@ function DashboardPage() {
                   {groupedInterviews[category.id].map((interview: Interview) => {
                     const candidateInfo = getCandidateInfo(users, interview.candidateId);
                     const startTime = new Date(interview.startTime);
+                    const status = getMeetingStatus(interview, new Date(now));
 
                     return (
                       <Card
@@ -105,6 +115,16 @@ function DashboardPage() {
 
                         {/* PASS & FAIL BUTTONS */}
                         <CardFooter className="p-4 pt-0 flex flex-col gap-3">
+                          {status === "live" && (
+                            <Button
+                              className="w-full gap-2"
+                              onClick={() => joinMeeting(interview.streamCallId)}
+                            >
+                              <VideoIcon className="size-4" />
+                              Enter Meeting
+                            </Button>
+                          )}
+
                           {interview.status === "completed" && (
                             <div className="flex gap-2 w-full">
                               <Button

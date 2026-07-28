@@ -1,5 +1,5 @@
 import { clsx, type ClassValue } from "clsx";
-import { addHours, intervalToDuration, isAfter, isBefore, isWithinInterval } from "date-fns";
+import { addHours, intervalToDuration, isBefore, isWithinInterval } from "date-fns";
 import { twMerge } from "tailwind-merge";
 import { Doc } from "../../convex/_generated/dataModel";
 
@@ -14,16 +14,17 @@ export const groupInterviews = (interviews: Interview[]) => {
   if (!interviews) return {};
 
   return interviews.reduce((acc: any, interview: Interview) => {
-    const date = new Date(interview.startTime);
-    const now = new Date();
+    const status = getMeetingStatus(interview);
 
     if (interview.status === "succeeded") {
       acc.succeeded = [...(acc.succeeded || []), interview];
     } else if (interview.status === "failed") {
       acc.failed = [...(acc.failed || []), interview];
-    } else if (isBefore(date, now)) {
+    } else if (status === "live") {
+      acc.live = [...(acc.live || []), interview];
+    } else if (status === "completed") {
       acc.completed = [...(acc.completed || []), interview];
-    } else if (isAfter(date, now)) {
+    } else if (status === "upcoming") {
       acc.upcoming = [...(acc.upcoming || []), interview];
     }
 
@@ -76,9 +77,8 @@ export const calculateRecordingDuration = (startTime: string, endTime: string) =
   return `${duration.seconds} seconds`;
 };
 
-export const getMeetingStatus = (interview: Interview) => {
-  const now = new Date();
-  const interviewStartTime = interview.startTime;
+export const getMeetingStatus = (interview: Interview, now = new Date()) => {
+  const interviewStartTime = new Date(interview.startTime);
   const endTime = addHours(interviewStartTime, 1);
 
   if (

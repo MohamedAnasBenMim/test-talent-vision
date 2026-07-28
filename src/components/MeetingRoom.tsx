@@ -23,7 +23,6 @@ import {
   DropdownMenuTrigger,
 } from "./ui/dropdown-menu";
 import { Button } from "./ui/button";
-import EndCallButton from "./EndCallButton";
 import CodeEditor from "./CodeEditor";
 import { useUserRole } from "@/hooks/useUserRole";
 
@@ -101,8 +100,6 @@ function MeetingRoom() {
                   >
                     <UsersIcon className="size-4" />
                   </Button>
-
-                  <EndCallButton />
                 </div>
               </div>
             </div>
