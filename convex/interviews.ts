@@ -68,3 +68,47 @@ export const updateInterviewStatus = mutation({
     });
   },
 });
+
+export const deleteByStreamCallId = mutation({
+  args: { streamCallId: v.string() },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const currentUser = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+
+    if (currentUser?.role !== "interviewer") {
+      throw new Error("Only interviewers can delete calls");
+    }
+
+    const interview = await ctx.db
+      .query("interviews")
+      .withIndex("by_stream_call_id", (q) => q.eq("streamCallId", args.streamCallId))
+      .first();
+
+    if (interview) {
+      const comments = await ctx.db
+        .query("comments")
+        .withIndex("by_interview_id", (q) => q.eq("interviewId", interview._id))
+        .collect();
+
+      for (const comment of comments) {
+        await ctx.db.delete(comment._id);
+      }
+
+      await ctx.db.delete(interview._id);
+    }
+
+    const codeSession = await ctx.db
+      .query("codeSessions")
+      .withIndex("by_stream_call_id", (q) => q.eq("streamCallId", args.streamCallId))
+      .first();
+
+    if (codeSession) {
+      await ctx.db.delete(codeSession._id);
+    }
+  },
+});
