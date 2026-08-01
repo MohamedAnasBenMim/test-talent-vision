@@ -24,9 +24,21 @@ import {
 import UserInfo from "@/components/UserInfo";
 import { Loader2Icon, XIcon } from "lucide-react";
 import { Calendar } from "@/components/ui/calendar";
-import { TIME_SLOTS } from "@/constants";
 import MeetingCard from "@/components/MeetingCard";
 import LoaderUI from "@/components/LoaderUI";
+
+const HOURS_24 = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, "0"));
+const MINUTES = Array.from({ length: 60 }, (_, minute) => String(minute).padStart(2, "0"));
+
+function getTimeParts(time: string) {
+  const [hour = "09", minute = "00"] = time.split(":");
+  return { hour, minute };
+}
+
+function setTimePart(time: string, part: "hour" | "minute", value: string) {
+  const { hour, minute } = getTimeParts(time);
+  return part === "hour" ? `${value}:${minute}` : `${hour}:${value}`;
+}
 
 function InterviewScheduleUI() {
   const client = useStreamVideoClient();
@@ -82,9 +94,15 @@ function InterviewScheduleUI() {
         return;
       }
 
-      const [hours, minutes] = time.split(":");
+      const [hours, minutes] = time.split(":").map(Number);
+
+      if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+        toast.error("Please enter a valid time");
+        return;
+      }
+
       const meetingDate = new Date(date);
-      meetingDate.setHours(parseInt(hours), parseInt(minutes), 0);
+      meetingDate.setHours(hours, minutes, 0, 0);
 
       const id = crypto.randomUUID();
       const call = client.call("default", id);
@@ -304,21 +322,49 @@ function InterviewScheduleUI() {
 
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Time</label>
-                  <Select
-                    value={formData.time}
-                    onValueChange={(time) => setFormData({ ...formData, time })}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select time" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {TIME_SLOTS.map((time) => (
-                        <SelectItem key={time} value={time}>
-                          {time}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <div className="flex items-center gap-2">
+                    <Select
+                      value={getTimeParts(formData.time).hour}
+                      onValueChange={(hour) =>
+                        setFormData({
+                          ...formData,
+                          time: setTimePart(formData.time, "hour", hour),
+                        })
+                      }
+                    >
+                      <SelectTrigger className="w-[76px]">
+                        <SelectValue placeholder="HH" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[240px]">
+                        {HOURS_24.map((hour) => (
+                          <SelectItem key={hour} value={hour}>
+                            {hour}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                    <span className="text-lg font-semibold text-muted-foreground">:</span>
+                    <Select
+                      value={getTimeParts(formData.time).minute}
+                      onValueChange={(minute) =>
+                        setFormData({
+                          ...formData,
+                          time: setTimePart(formData.time, "minute", minute),
+                        })
+                      }
+                    >
+                      <SelectTrigger className="w-[76px]">
+                        <SelectValue placeholder="MM" />
+                      </SelectTrigger>
+                      <SelectContent className="max-h-[240px]">
+                        {MINUTES.map((minute) => (
+                          <SelectItem key={minute} value={minute}>
+                            {minute}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  </div>
                 </div>
               </div>
 
