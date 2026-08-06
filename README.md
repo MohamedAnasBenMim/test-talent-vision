@@ -55,6 +55,13 @@ If the Clerk webhook in `convex/http.ts` is enabled, also set `CLERK_WEBHOOK_SEC
 npx convex env set CLERK_WEBHOOK_SECRET your_webhook_secret
 ```
 
+For AI CV screening, set your Gemini credentials in Convex:
+
+```shell
+npx convex env set GEMINI_API_KEY
+npx convex env set GEMINI_MODEL gemini-3.6-flash
+```
+
 ## Run Locally
 
 Install dependencies:

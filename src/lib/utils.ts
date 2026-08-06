@@ -32,16 +32,24 @@ export const groupInterviews = (interviews: Interview[]) => {
   }, {});
 };
 
-export const getCandidateInfo = (users: User[], candidateId: string) => {
+export const getCandidateInfo = (
+  users: User[],
+  candidateId: string,
+  fallback?: { name?: string; email?: string }
+) => {
   const candidate = users?.find((user) => user.clerkId === candidateId);
+  const displayName = candidate?.name || fallback?.name || fallback?.email || "Unknown Candidate";
+
   return {
-    name: candidate?.name || "Unknown Candidate",
+    name: displayName,
     image: candidate?.image || "",
     initials:
-      candidate?.name
+      displayName
         ?.split(" ")
         .map((n) => n[0])
-        .join("") || "UC",
+        .join("")
+        .slice(0, 2)
+        .toUpperCase() || "UC",
   };
 };
 

@@ -8,6 +8,8 @@
  * @module
  */
 
+import type * as applicationAnalysis from "../applicationAnalysis.js";
+import type * as applications from "../applications.js";
 import type * as codeSessions from "../codeSessions.js";
 import type * as comments from "../comments.js";
 import type * as http from "../http.js";
@@ -21,6 +23,8 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  applicationAnalysis: typeof applicationAnalysis;
+  applications: typeof applications;
   codeSessions: typeof codeSessions;
   comments: typeof comments;
   http: typeof http;

@@ -44,6 +44,9 @@ export const createInterview = mutation({
     status: v.string(),
     streamCallId: v.string(),
     candidateId: v.string(),
+    applicationId: v.optional(v.id("applications")),
+    candidateName: v.optional(v.string()),
+    candidateEmail: v.optional(v.string()),
     interviewerIds: v.array(v.string()),
   },
   handler: async (ctx, args) => {

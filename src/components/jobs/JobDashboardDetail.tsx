@@ -1,0 +1,170 @@
+"use client";
+
+import { useMemo } from "react";
+import { useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+import LoaderUI from "@/components/LoaderUI";
+import JobEditor from "@/components/jobs/JobEditor";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  AI_RECOMMENDATION_LABELS,
+  AiRecommendation,
+  getAiRecommendationVariant,
+} from "@/components/applications/status";
+import { format } from "date-fns";
+import { ArrowLeftIcon, CopyIcon, ExternalLinkIcon, MailIcon, PhoneIcon } from "lucide-react";
+import Link from "next/link";
+import toast from "react-hot-toast";
+
+export default function JobDashboardDetail({ jobId }: { jobId: string }) {
+  const job = useQuery(api.applications.getJobByJobId, { jobId });
+  const applications = useQuery(api.applications.getApplicationsByJobId, { jobId });
+  const publicUrl = useMemo(() => {
+    if (typeof window === "undefined") return "";
+    return `${window.location.origin}/jobs/${jobId}`;
+  }, [jobId]);
+
+  const copyPublicLink = async () => {
+    if (!publicUrl) return;
+    await navigator.clipboard.writeText(publicUrl);
+    toast.success("Public job link copied");
+  };
+
+  if (job === undefined || applications === undefined) return <LoaderUI />;
+
+  if (!job) {
+    return (
+      <div className="container mx-auto max-w-3xl px-4 py-12">
+        <Card>
+          <CardContent className="p-8 text-center">
+            <h1 className="text-2xl font-bold">Job Not Found</h1>
+            <Button asChild className="mt-6">
+              <Link href="/dashboard/jobs">Back to Jobs</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  return (
+    <div className="container mx-auto max-w-7xl px-4 py-8 sm:px-6">
+      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
+        <Button asChild variant="ghost">
+          <Link href="/dashboard/jobs">
+            <ArrowLeftIcon className="size-4" />
+            Jobs
+          </Link>
+        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={copyPublicLink}>
+            <CopyIcon className="size-4" />
+            Copy Public Link
+          </Button>
+          <Button asChild>
+            <Link href={`/jobs/${job.jobId}`} target="_blank">
+              <ExternalLinkIcon className="size-4" />
+              Open Candidate Page
+            </Link>
+          </Button>
+        </div>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
+        <section className="space-y-6">
+          <Card className="overflow-hidden">
+            <div className="h-1 bg-gradient-to-r from-primary via-accent to-fuchsia-400" />
+            <CardHeader>
+              <div className="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">
+                    Job Pipeline
+                  </p>
+                  <CardTitle className="mt-3 text-3xl">{job.title}</CardTitle>
+                  <p className="mt-2 text-sm text-muted-foreground">
+                    {job.contractType || "Contract not specified"} ·{" "}
+                    {job.location || "Location not specified"}
+                  </p>
+                </div>
+                <Badge>{applications.length} applicants</Badge>
+              </div>
+            </CardHeader>
+            <CardContent>
+              <div className="rounded-lg border border-border/70 bg-background/45 p-4">
+                <p className="text-sm font-semibold">LinkedIn apply link</p>
+                <p className="mt-2 break-all text-sm text-muted-foreground">{publicUrl}</p>
+              </div>
+            </CardContent>
+          </Card>
+
+          <JobEditor jobId={job.jobId} />
+        </section>
+
+        <section>
+          <Card>
+            <CardHeader>
+              <CardTitle>Applicants Sorted by AI Score</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              {applications.length === 0 ? (
+                <div className="rounded-lg border border-border/70 bg-background/45 p-8 text-center text-sm text-muted-foreground">
+                  No one has applied for this job yet.
+                </div>
+              ) : (
+                applications.map((application) => {
+                  const recommendation =
+                    application.aiRecommendation as AiRecommendation | undefined;
+
+                  return (
+                    <div
+                      key={application._id}
+                      className="rounded-lg border border-border/70 bg-background/45 p-4"
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-3">
+                        <div className="min-w-0">
+                          <Link
+                            href={`/dashboard/applications/${application._id}`}
+                            className="font-semibold hover:text-primary"
+                          >
+                            {application.fullName}
+                          </Link>
+                          <div className="mt-2 grid gap-1 text-sm text-muted-foreground">
+                            <span className="flex items-center gap-2">
+                              <MailIcon className="size-4 text-primary" />
+                              {application.email}
+                            </span>
+                            <span className="flex items-center gap-2">
+                              <PhoneIcon className="size-4 text-primary" />
+                              {application.phone}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-3xl font-bold">{application.aiScore ?? "--"}</p>
+                          <p className="text-xs text-muted-foreground">AI score</p>
+                        </div>
+                      </div>
+                      <div className="mt-3 flex flex-wrap items-center gap-2">
+                        <Badge variant="outline">{application.status}</Badge>
+                        {recommendation && (
+                          <Badge variant={getAiRecommendationVariant(recommendation)}>
+                            {AI_RECOMMENDATION_LABELS[recommendation]}
+                          </Badge>
+                        )}
+                        <span className="text-xs text-muted-foreground">
+                          {format(new Date(application.createdAt), "MMM d, yyyy · h:mm a")}
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </CardContent>
+          </Card>
+        </section>
+      </div>
+    </div>
+  );
+}

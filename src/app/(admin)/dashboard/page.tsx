@@ -57,9 +57,17 @@ function DashboardPage() {
             Monitor active interviews, review candidate outcomes, and record hiring signals.
           </p>
         </div>
-        <Link href="/schedule">
-          <Button>Schedule New Interview</Button>
-        </Link>
+        <div className="flex flex-wrap gap-3">
+          <Button asChild variant="outline">
+            <Link href="/dashboard/applications">Review Applications</Link>
+          </Button>
+          <Button asChild variant="outline">
+            <Link href="/dashboard/jobs">Manage Jobs</Link>
+          </Button>
+          <Button asChild>
+            <Link href="/schedule">Schedule New Interview</Link>
+          </Button>
+        </div>
       </div>
 
       <div className="space-y-8">
@@ -75,7 +83,10 @@ function DashboardPage() {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                   {groupedInterviews[category.id].map((interview: Interview) => {
-                    const candidateInfo = getCandidateInfo(users, interview.candidateId);
+                    const candidateInfo = getCandidateInfo(users, interview.candidateId, {
+                      name: interview.candidateName,
+                      email: interview.candidateEmail,
+                    });
                     const startTime = new Date(interview.startTime);
                     const status = getMeetingStatus(interview, new Date(now));
 

@@ -1,0 +1,614 @@
+"use client";
+
+import { FormEvent, useMemo, useState } from "react";
+import { useMutation, useQuery } from "convex/react";
+import { api } from "../../../convex/_generated/api";
+import { Id } from "../../../convex/_generated/dataModel";
+import { sendApplicationRejectionEmail } from "@/actions/application.actions";
+import { sendInterviewInvite } from "@/actions/invite.actions";
+import LoaderUI from "@/components/LoaderUI";
+import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
+import { Calendar } from "@/components/ui/calendar";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  APPLICATION_STATUS_LABELS,
+  AI_RECOMMENDATION_LABELS,
+  ApplicationStatus,
+  AiRecommendation,
+  getAiRecommendationVariant,
+  getApplicationStatusVariant,
+} from "@/components/applications/status";
+import { useUser } from "@clerk/nextjs";
+import { useStreamVideoClient } from "@stream-io/video-react-sdk";
+import { format } from "date-fns";
+import {
+  ArrowLeftIcon,
+  BriefcaseBusinessIcon,
+  CalendarIcon,
+  CheckCircle2Icon,
+  ExternalLinkIcon,
+  FileTextIcon,
+  GithubIcon,
+  LinkedinIcon,
+  LinkIcon,
+  Loader2Icon,
+  MailIcon,
+  PhoneIcon,
+  SendIcon,
+  UserIcon,
+  XCircleIcon,
+} from "lucide-react";
+import Link from "next/link";
+import toast from "react-hot-toast";
+
+const HOURS_24 = Array.from({ length: 24 }, (_, hour) => String(hour).padStart(2, "0"));
+const MINUTES = Array.from({ length: 60 }, (_, minute) => String(minute).padStart(2, "0"));
+
+type ApplicationDetailProps = {
+  applicationId: string;
+};
+
+function getTimeParts(time: string) {
+  const [hour = "09", minute = "00"] = time.split(":");
+  return { hour, minute };
+}
+
+function setTimePart(time: string, part: "hour" | "minute", value: string) {
+  const { hour, minute } = getTimeParts(time);
+  return part === "hour" ? `${value}:${minute}` : `${hour}:${value}`;
+}
+
+function formatFileSize(size: number) {
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function CandidateLink({
+  href,
+  icon,
+  label,
+}: {
+  href?: string;
+  icon: React.ReactNode;
+  label: string;
+}) {
+  if (!href) {
+    return (
+      <div className="flex items-center justify-between rounded-lg border border-border/70 bg-background/45 p-3 text-sm text-muted-foreground">
+        <span className="flex items-center gap-2">
+          {icon}
+          {label}
+        </span>
+        <span>Not provided</span>
+      </div>
+    );
+  }
+
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className="flex items-center justify-between rounded-lg border border-border/70 bg-background/45 p-3 text-sm transition-colors hover:border-primary/40 hover:bg-primary/10"
+    >
+      <span className="flex min-w-0 items-center gap-2">
+        {icon}
+        <span className="truncate">{label}</span>
+      </span>
+      <ExternalLinkIcon className="size-4 shrink-0 text-primary" />
+    </a>
+  );
+}
+
+export default function ApplicationDetail({ applicationId }: ApplicationDetailProps) {
+  const convexApplicationId = applicationId as Id<"applications">;
+  const application = useQuery(api.applications.getApplicationById, {
+    id: convexApplicationId,
+  });
+  const updateApplicationStatus = useMutation(api.applications.updateApplicationStatus);
+  const createInterview = useMutation(api.interviews.createInterview);
+  const client = useStreamVideoClient();
+  const { user } = useUser();
+  const [isRejecting, setIsRejecting] = useState(false);
+  const [isScheduleOpen, setIsScheduleOpen] = useState(false);
+  const [isScheduling, setIsScheduling] = useState(false);
+  const [scheduleForm, setScheduleForm] = useState({
+    title: "",
+    description: "",
+    date: new Date(),
+    time: "09:00",
+  });
+
+  const status = application?.status as ApplicationStatus | undefined;
+  const defaultTitle = useMemo(() => {
+    if (!application) return "";
+    return `Technical Interview - ${application.position}`;
+  }, [application]);
+
+  const openScheduleDialog = () => {
+    setScheduleForm((prev) => ({
+      ...prev,
+      title: prev.title || defaultTitle,
+      description:
+        prev.description ||
+        `Technical interview for ${application?.fullName} applying as ${application?.position}.`,
+    }));
+    setIsScheduleOpen(true);
+  };
+
+  const handleReject = async () => {
+    if (!application) return;
+
+    setIsRejecting(true);
+
+    try {
+      await sendApplicationRejectionEmail({
+        candidateEmail: application.email,
+        candidateName: application.fullName,
+        position: application.position,
+      });
+      await updateApplicationStatus({
+        id: application._id,
+        status: "cv_rejected",
+      });
+      toast.success("Candidate rejected and email sent");
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Failed to reject candidate");
+    } finally {
+      setIsRejecting(false);
+    }
+  };
+
+  const handleScheduleInterview = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!application || !client || !user) return;
+
+    setIsScheduling(true);
+
+    try {
+      const [hours, minutes] = scheduleForm.time.split(":").map(Number);
+
+      if (Number.isNaN(hours) || Number.isNaN(minutes)) {
+        toast.error("Please choose a valid time");
+        return;
+      }
+
+      const meetingDate = new Date(scheduleForm.date);
+      meetingDate.setHours(hours, minutes, 0, 0);
+
+      const streamCallId = crypto.randomUUID();
+      const call = client.call("default", streamCallId);
+
+      await call.getOrCreate({
+        data: {
+          starts_at: meetingDate.toISOString(),
+          custom: {
+            description: scheduleForm.title,
+            additionalDetails: scheduleForm.description,
+          },
+        },
+      });
+
+      await createInterview({
+        title: scheduleForm.title,
+        description: scheduleForm.description,
+        startTime: meetingDate.getTime(),
+        status: "upcoming",
+        streamCallId,
+        candidateId: application.email,
+        applicationId: application._id,
+        candidateName: application.fullName,
+        candidateEmail: application.email,
+        interviewerIds: [user.id],
+      });
+
+      const meetingUrl = `${window.location.origin}/meeting/${streamCallId}`;
+
+      await sendInterviewInvite({
+        candidateEmail: application.email,
+        candidateName: application.fullName,
+        interviewTitle: scheduleForm.title,
+        interviewDescription: scheduleForm.description,
+        startTime: meetingDate.getTime(),
+        meetingUrl,
+      });
+
+      await updateApplicationStatus({
+        id: application._id,
+        status: "technical_invited",
+      });
+
+      toast.success("Technical interview scheduled and invitation email sent");
+      setIsScheduleOpen(false);
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Failed to schedule interview");
+    } finally {
+      setIsScheduling(false);
+    }
+  };
+
+  if (application === undefined) return <LoaderUI />;
+
+  if (!application) {
+    return (
+      <div className="container mx-auto max-w-3xl px-4 py-12">
+        <Card>
+          <CardContent className="p-8 text-center">
+            <h1 className="text-2xl font-bold">Application Not Found</h1>
+            <Button asChild className="mt-6">
+              <Link href="/dashboard/applications">Back to Applications</Link>
+            </Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  const submittedAt = format(new Date(application.createdAt), "EEEE, MMMM d, yyyy · h:mm a");
+  const canInvite = application.status !== "technical_invited";
+  const canReject = application.status !== "cv_rejected";
+  const recommendation = application.aiRecommendation as AiRecommendation | undefined;
+
+  return (
+    <div className="container mx-auto max-w-7xl px-4 py-8 sm:px-6">
+      <div className="mb-6">
+        <Button asChild variant="ghost" className="gap-2">
+          <Link href="/dashboard/applications">
+            <ArrowLeftIcon className="size-4" />
+            Applications
+          </Link>
+        </Button>
+      </div>
+
+      <div className="grid gap-6 lg:grid-cols-[1.05fr_0.95fr]">
+        <section className="space-y-6">
+          <Card className="overflow-hidden">
+            <div className="h-1 bg-gradient-to-r from-primary via-accent to-fuchsia-400" />
+            <CardHeader>
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">
+                    Candidate Application
+                  </p>
+                  <CardTitle className="mt-3 text-3xl">{application.fullName}</CardTitle>
+                  <p className="mt-2 text-sm text-muted-foreground">{application.position}</p>
+                </div>
+                {status && (
+                  <Badge variant={getApplicationStatusVariant(status)}>
+                    {APPLICATION_STATUS_LABELS[status]}
+                  </Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="grid gap-4 sm:grid-cols-2">
+              <InfoItem icon={<MailIcon className="size-4 text-primary" />} label="Email">
+                {application.email}
+              </InfoItem>
+              <InfoItem icon={<PhoneIcon className="size-4 text-primary" />} label="Phone">
+                {application.phone}
+              </InfoItem>
+              <InfoItem icon={<BriefcaseBusinessIcon className="size-4 text-accent" />} label="Position">
+                {application.position}
+              </InfoItem>
+              <InfoItem icon={<CalendarIcon className="size-4 text-accent" />} label="Submitted">
+                {submittedAt}
+              </InfoItem>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>CV File</CardTitle>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="min-w-0">
+                <p className="truncate font-semibold">{application.cvFileName}</p>
+                <p className="mt-1 text-sm text-muted-foreground">
+                  {formatFileSize(application.cvFileSize)} · {application.cvFileType}
+                </p>
+              </div>
+              <Button asChild disabled={!application.cvUrl}>
+                <a href={application.cvUrl ?? "#"} target="_blank" rel="noreferrer">
+                  <FileTextIcon className="size-4" />
+                  View CV
+                </a>
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Candidate Links</CardTitle>
+            </CardHeader>
+            <CardContent className="grid gap-3">
+              <CandidateLink
+                href={application.portfolioUrl}
+                icon={<LinkIcon className="size-4 text-primary" />}
+                label="Portfolio"
+              />
+              <CandidateLink
+                href={application.githubUrl}
+                icon={<GithubIcon className="size-4 text-primary" />}
+                label="GitHub"
+              />
+              <CandidateLink
+                href={application.linkedinUrl}
+                icon={<LinkedinIcon className="size-4 text-primary" />}
+                label="LinkedIn"
+              />
+            </CardContent>
+          </Card>
+        </section>
+
+        <aside className="space-y-6">
+          <Card>
+            <CardHeader>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>AI Screening</CardTitle>
+                {recommendation && (
+                  <Badge variant={getAiRecommendationVariant(recommendation)}>
+                    {AI_RECOMMENDATION_LABELS[recommendation]}
+                  </Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="rounded-lg border border-border/70 bg-background/45 p-4">
+                <p className="text-sm text-muted-foreground">Score</p>
+                <div className="mt-2 flex items-end gap-2">
+                  <span className="text-4xl font-bold text-foreground">
+                    {application.aiScore ?? "--"}
+                  </span>
+                  <span className="pb-1 text-sm text-muted-foreground">/ 100</span>
+                </div>
+                {application.aiSummary && (
+                  <p className="mt-3 text-sm leading-6 text-muted-foreground">
+                    {application.aiSummary}
+                  </p>
+                )}
+              </div>
+
+              {application.analysis ? (
+                <div className="grid gap-3">
+                  <AnalysisList title="Matched Skills" items={application.analysis.matchedSkills} />
+                  <AnalysisList title="Missing Skills" items={application.analysis.missingSkills} />
+                  <AnalysisList title="Strengths" items={application.analysis.strengths} />
+                  <AnalysisList title="Concerns" items={application.analysis.concerns} />
+                  <div className="rounded-lg border border-border/70 bg-background/45 p-3">
+                    <p className="text-sm font-semibold">Experience Summary</p>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                      {application.analysis.experienceSummary}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <p className="text-sm leading-6 text-muted-foreground">
+                  No AI analysis yet. New candidate submissions are screened automatically.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Recruiter Decision</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Button className="w-full" disabled={!canInvite} onClick={openScheduleDialog}>
+                <CheckCircle2Icon className="size-4" />
+                Invite to Technical Interview
+              </Button>
+              <Button
+                variant="destructive"
+                className="w-full"
+                disabled={!canReject || isRejecting}
+                onClick={handleReject}
+              >
+                {isRejecting ? (
+                  <Loader2Icon className="size-4 animate-spin" />
+                ) : (
+                  <XCircleIcon className="size-4" />
+                )}
+                Reject Candidate
+              </Button>
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Status Timeline</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3 text-sm">
+              <div className="flex items-center gap-3 rounded-lg border border-border/70 bg-background/45 p-3">
+                <UserIcon className="size-4 text-primary" />
+                <span>Application submitted</span>
+              </div>
+              {application.status === "technical_invited" && (
+                <div className="flex items-center gap-3 rounded-lg border border-primary/30 bg-primary/10 p-3">
+                  <SendIcon className="size-4 text-primary" />
+                  <span>Technical interview invitation sent</span>
+                </div>
+              )}
+              {application.status === "cv_rejected" && (
+                <div className="flex items-center gap-3 rounded-lg border border-destructive/30 bg-destructive/10 p-3">
+                  <XCircleIcon className="size-4 text-destructive" />
+                  <span>Candidate rejected by CV review</span>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+        </aside>
+      </div>
+
+      <Dialog open={isScheduleOpen} onOpenChange={setIsScheduleOpen}>
+        <DialogContent className="max-h-[calc(100vh-80px)] overflow-auto sm:max-w-[560px]">
+          <DialogHeader>
+            <DialogTitle>Schedule Technical Interview</DialogTitle>
+            <DialogDescription>
+              Create a Stream interview and email the candidate their invitation link.
+            </DialogDescription>
+          </DialogHeader>
+
+          <form className="space-y-4" onSubmit={handleScheduleInterview}>
+            <div className="space-y-2">
+              <Label htmlFor="interviewTitle">Title</Label>
+              <Input
+                id="interviewTitle"
+                required
+                value={scheduleForm.title}
+                onChange={(event) =>
+                  setScheduleForm((prev) => ({ ...prev, title: event.target.value }))
+                }
+              />
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="interviewDescription">Description</Label>
+              <Textarea
+                id="interviewDescription"
+                rows={3}
+                value={scheduleForm.description}
+                onChange={(event) =>
+                  setScheduleForm((prev) => ({ ...prev, description: event.target.value }))
+                }
+              />
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-[1fr_auto]">
+              <div className="space-y-2">
+                <Label>Date</Label>
+                <Calendar
+                  mode="single"
+                  selected={scheduleForm.date}
+                  onSelect={(date) => date && setScheduleForm((prev) => ({ ...prev, date }))}
+                  disabled={(date) => date < new Date()}
+                  className="rounded-md border"
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label>Time</Label>
+                <div className="flex items-center gap-2">
+                  <Select
+                    value={getTimeParts(scheduleForm.time).hour}
+                    onValueChange={(hour) =>
+                      setScheduleForm((prev) => ({
+                        ...prev,
+                        time: setTimePart(prev.time, "hour", hour),
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="w-[76px]">
+                      <SelectValue placeholder="HH" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[240px]">
+                      {HOURS_24.map((hour) => (
+                        <SelectItem key={hour} value={hour}>
+                          {hour}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  <span className="text-lg font-semibold text-muted-foreground">:</span>
+                  <Select
+                    value={getTimeParts(scheduleForm.time).minute}
+                    onValueChange={(minute) =>
+                      setScheduleForm((prev) => ({
+                        ...prev,
+                        time: setTimePart(prev.time, "minute", minute),
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="w-[76px]">
+                      <SelectValue placeholder="MM" />
+                    </SelectTrigger>
+                    <SelectContent className="max-h-[240px]">
+                      {MINUTES.map((minute) => (
+                        <SelectItem key={minute} value={minute}>
+                          {minute}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-3 pt-2">
+              <Button type="button" variant="outline" onClick={() => setIsScheduleOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="submit" disabled={isScheduling}>
+                {isScheduling ? (
+                  <Loader2Icon className="size-4 animate-spin" />
+                ) : (
+                  <SendIcon className="size-4" />
+                )}
+                Send Invitation
+              </Button>
+            </div>
+          </form>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function AnalysisList({ title, items }: { title: string; items: string[] }) {
+  return (
+    <div className="rounded-lg border border-border/70 bg-background/45 p-3">
+      <p className="text-sm font-semibold">{title}</p>
+      {items.length > 0 ? (
+        <div className="mt-2 flex flex-wrap gap-2">
+          {items.map((item) => (
+            <Badge key={item} variant="outline">
+              {item}
+            </Badge>
+          ))}
+        </div>
+      ) : (
+        <p className="mt-2 text-sm text-muted-foreground">None detected</p>
+      )}
+    </div>
+  );
+}
+
+function InfoItem({
+  icon,
+  label,
+  children,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-border/70 bg-background/45 p-4">
+      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+        {icon}
+        {label}
+      </div>
+      <p className="mt-2 break-words font-semibold">{children}</p>
+    </div>
+  );
+}
