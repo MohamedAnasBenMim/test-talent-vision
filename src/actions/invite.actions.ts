@@ -109,9 +109,6 @@ export async function sendInterviewInvite({
                 The interview page will show a waiting screen before the scheduled time. When the time arrives,
                 the Enter Interview button will become available.
               </p>
-              <p style="margin:18px 0 0;color:#64748b;font-size:12px;word-break:break-all;">
-                ${meetingUrl}
-              </p>
             </div>
           </div>
         </div>
@@ -121,9 +118,6 @@ export async function sendInterviewInvite({
 You have been invited to a technical interview for ${interviewTitle}.
 
 Scheduled date: ${scheduledTime}
-
-Open your interview link:
-${meetingUrl}
 
 The page will show a waiting screen before the scheduled time. When the time arrives, the Enter Interview button will become available.`,
     }),

@@ -131,8 +131,8 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
     application ? { applicationId: application._id } : "skip"
   );
   const assessmentReport = useQuery(
-    api.assessments.getAssessmentReportByInterview,
-    scheduledInterview ? { interviewId: scheduledInterview._id } : "skip"
+    api.assessments.getAssessmentReportByApplication,
+    application ? { applicationId: application._id } : "skip"
   );
   const updateApplicationStatus = useMutation(api.applications.updateApplicationStatus);
   const createInterview = useMutation(api.interviews.createInterview);

@@ -5,6 +5,7 @@ import { Doc, Id } from "./_generated/dataModel";
 const EXAM_DURATION_MS = 15 * 60 * 1000;
 const PASS_SCORE = 70;
 const MAX_WARNINGS_BEFORE_AUTO_SUBMIT = 3;
+const WARNING_DEDUPE_MS = 2500;
 
 const QUESTION_BANK = [
   {
@@ -184,6 +185,11 @@ function normalizeAnswers(answers: AssessmentAnswer[]) {
   });
 }
 
+function getEventDedupeKey(type: string) {
+  if (type === "tab_hidden" || type === "window_blur") return "focus_leave";
+  return type;
+}
+
 export const getExamState = query({
   args: { streamCallId: v.string() },
   handler: async (ctx, args) => {
@@ -352,13 +358,22 @@ export const logEvent = mutation({
     const attempt = await findAttemptForIdentity(ctx, args.streamCallId, identity, currentUser);
     if (!attempt || attempt.status !== "in_progress") return;
 
+    const now = Date.now();
+    const dedupeKey = getEventDedupeKey(args.type);
+    const recentEvents = await getAttemptEvents(ctx, attempt._id);
+    const duplicateEvent = recentEvents.some((event: Doc<"assessmentEvents">) => {
+      return getEventDedupeKey(event.type) === dedupeKey && now - event.createdAt < WARNING_DEDUPE_MS;
+    });
+
+    if (duplicateEvent) return;
+
     await ctx.db.insert("assessmentEvents", {
       attemptId: attempt._id,
       streamCallId: args.streamCallId,
       candidateId: identity.subject,
       type: args.type,
       message: args.message,
-      createdAt: Date.now(),
+      createdAt: now,
     });
   },
 });
@@ -380,6 +395,51 @@ export const getAssessmentReportByInterview = query({
       .collect();
 
     const attempt = attempts.sort((a, b) => b.startedAt - a.startedAt)[0] ?? null;
+    if (!attempt) return null;
+
+    const events = await getAttemptEvents(ctx, attempt._id);
+
+    return {
+      attempt,
+      events: events.sort(
+        (a: Doc<"assessmentEvents">, b: Doc<"assessmentEvents">) => a.createdAt - b.createdAt
+      ),
+      passScore: PASS_SCORE,
+    };
+  },
+});
+
+export const getAssessmentReportByApplication = query({
+  args: { applicationId: v.id("applications") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const currentUser = await getCurrentUser(ctx, identity);
+    if (currentUser?.role !== "interviewer") {
+      throw new Error("Only interviewers can view assessment reports");
+    }
+
+    const interviews = await ctx.db
+      .query("interviews")
+      .withIndex("by_application_id", (q: any) => q.eq("applicationId", args.applicationId))
+      .collect();
+
+    const attempts = await Promise.all(
+      interviews.map(async (interview: Doc<"interviews">) => {
+        return await ctx.db
+          .query("assessmentAttempts")
+          .withIndex("by_interview_id", (q: any) => q.eq("interviewId", interview._id))
+          .collect();
+      })
+    );
+
+    const attempt =
+      attempts
+        .flat()
+        .sort((a: Doc<"assessmentAttempts">, b: Doc<"assessmentAttempts">) => b.startedAt - a.startedAt)[0] ??
+      null;
+
     if (!attempt) return null;
 
     const events = await getAttemptEvents(ctx, attempt._id);

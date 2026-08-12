@@ -24,6 +24,8 @@ const AI_RECOMMENDATIONS = v.union(
   v.literal("weak_match")
 );
 
+const AUTO_TECHNICAL_INVITE_EMAIL = "medanasbenmim123@gmail.com";
+
 const JOB_REQUIREMENTS = {
   jobId: v.string(),
   title: v.string(),
@@ -249,6 +251,73 @@ export const updateApplicationStatus = mutation({
       status: args.status,
       updatedAt: Date.now(),
     });
+  },
+});
+
+export const createAutoInterviewForTargetApplication = mutation({
+  args: {
+    id: v.id("applications"),
+    streamCallId: v.string(),
+    title: v.string(),
+    description: v.optional(v.string()),
+    startTime: v.number(),
+  },
+  handler: async (ctx, args) => {
+    const application = await ctx.db.get(args.id);
+    if (!application) throw new Error("Application not found");
+
+    if (application.email.trim().toLowerCase() !== AUTO_TECHNICAL_INVITE_EMAIL) {
+      return null;
+    }
+
+    const existingInterview = await ctx.db
+      .query("interviews")
+      .withIndex("by_application_id", (q) => q.eq("applicationId", args.id))
+      .first();
+
+    if (existingInterview) {
+      return {
+        created: false,
+        interviewId: existingInterview._id,
+        streamCallId: existingInterview.streamCallId,
+        candidateEmail: application.email,
+        candidateName: application.fullName,
+        position: application.position,
+        startTime: existingInterview.startTime,
+        title: existingInterview.title,
+        description: existingInterview.description,
+      };
+    }
+
+    const interviewId = await ctx.db.insert("interviews", {
+      title: args.title,
+      description: args.description,
+      startTime: args.startTime,
+      status: "upcoming",
+      streamCallId: args.streamCallId,
+      candidateId: application.email,
+      applicationId: args.id,
+      candidateName: application.fullName,
+      candidateEmail: application.email,
+      interviewerIds: [],
+    });
+
+    await ctx.db.patch(args.id, {
+      status: "technical_invited",
+      updatedAt: Date.now(),
+    });
+
+    return {
+      created: true,
+      interviewId,
+      streamCallId: args.streamCallId,
+      candidateEmail: application.email,
+      candidateName: application.fullName,
+      position: application.position,
+      startTime: args.startTime,
+      title: args.title,
+      description: args.description,
+    };
   },
 });
 

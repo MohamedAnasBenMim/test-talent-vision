@@ -14,7 +14,6 @@ import {
   LockIcon,
   RadioIcon,
   ShieldCheckIcon,
-  XCircleIcon,
 } from "lucide-react";
 import toast from "react-hot-toast";
 
@@ -58,6 +57,11 @@ function formatDuration(startedAt?: number, submittedAt?: number) {
   return `${minutes}m ${String(remainingSeconds).padStart(2, "0")}s`;
 }
 
+function getEventCooldownKey(type: ExamEventType) {
+  if (type === "tab_hidden" || type === "window_blur") return "focus_leave";
+  return type;
+}
+
 async function requestFullscreenMode() {
   if (typeof document === "undefined" || document.fullscreenElement) return;
 
@@ -81,9 +85,8 @@ export default function AssessmentGate({ streamCallId, onCompleted }: Assessment
   const [isStarting, setIsStarting] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [now, setNow] = useState(Date.now());
-  const localWarningCount = useRef(0);
-  const lastEventAt = useRef<Partial<Record<ExamEventType, number>>>({});
-  const autoSubmitTriggered = useRef(false);
+  const lastEventAt = useRef<Record<string, number>>({});
+  const timeSubmitTriggered = useRef(false);
 
   const attempt = examState?.attempt;
   const isInProgress = attempt?.status === "in_progress";
@@ -93,7 +96,7 @@ export default function AssessmentGate({ streamCallId, onCompleted }: Assessment
     return Object.keys(answers).filter((questionId) => Boolean(answers[questionId])).length;
   }, [answers]);
 
-  const warningCount = (examState?.warningCount ?? 0) + localWarningCount.current;
+  const warningCount = examState?.warningCount ?? 0;
 
   useEffect(() => {
     if (!attempt) return;
@@ -138,14 +141,14 @@ export default function AssessmentGate({ streamCallId, onCompleted }: Assessment
   };
 
   const recordEvent = async (type: ExamEventType, message: string) => {
-    if (!isInProgress || autoSubmitTriggered.current) return;
+    if (!isInProgress) return;
 
     const currentTime = Date.now();
-    const lastTime = lastEventAt.current[type] ?? 0;
+    const eventKey = getEventCooldownKey(type);
+    const lastTime = lastEventAt.current[eventKey] ?? 0;
     if (currentTime - lastTime < 1500) return;
 
-    lastEventAt.current[type] = currentTime;
-    localWarningCount.current += 1;
+    lastEventAt.current[eventKey] = currentTime;
 
     try {
       await logEvent({ streamCallId, type, message });
@@ -154,19 +157,13 @@ export default function AssessmentGate({ streamCallId, onCompleted }: Assessment
     }
 
     toast.error(message);
-
-    const nextWarnings = (examState?.warningCount ?? 0) + localWarningCount.current;
-    if (nextWarnings >= (examState?.maxWarningsBeforeAutoSubmit ?? 3)) {
-      autoSubmitTriggered.current = true;
-      void submit(true);
-    }
   };
 
   useEffect(() => {
     if (!isInProgress || !attempt?.expiresAt) return;
-    if (now < attempt.expiresAt || autoSubmitTriggered.current) return;
+    if (now < attempt.expiresAt || timeSubmitTriggered.current) return;
 
-    autoSubmitTriggered.current = true;
+    timeSubmitTriggered.current = true;
     void submit(true);
   }, [attempt?.expiresAt, isInProgress, now]);
 
@@ -175,33 +172,33 @@ export default function AssessmentGate({ streamCallId, onCompleted }: Assessment
 
     const handleVisibilityChange = () => {
       if (document.visibilityState === "hidden") {
-        void recordEvent("tab_hidden", "Leaving the exam tab was recorded.");
+        void recordEvent("tab_hidden", "Switching tabs is prohibited during the assessment.");
       }
     };
 
     const handleBlur = () => {
-      void recordEvent("window_blur", "Leaving the exam window was recorded.");
+      void recordEvent("window_blur", "Leaving the exam window is prohibited.");
     };
 
     const handleFullscreenChange = () => {
       if (!document.fullscreenElement) {
-        void recordEvent("fullscreen_left", "Leaving fullscreen was recorded.");
+        void recordEvent("fullscreen_left", "Leaving fullscreen is prohibited.");
       }
     };
 
     const blockCopy = (event: ClipboardEvent) => {
       event.preventDefault();
-      void recordEvent("copy_blocked", "Copy is disabled during the assessment.");
+      void recordEvent("copy_blocked", "Copy is prohibited during the assessment.");
     };
 
     const blockPaste = (event: ClipboardEvent) => {
       event.preventDefault();
-      void recordEvent("paste_blocked", "Paste is disabled during the assessment.");
+      void recordEvent("paste_blocked", "Paste is prohibited during the assessment.");
     };
 
     const blockContextMenu = (event: MouseEvent) => {
       event.preventDefault();
-      void recordEvent("context_menu_blocked", "Context menu is disabled during the assessment.");
+      void recordEvent("context_menu_blocked", "Right-click is prohibited during the assessment.");
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
@@ -303,7 +300,8 @@ export default function AssessmentGate({ streamCallId, onCompleted }: Assessment
 
               <div className="rounded-lg border border-border/70 bg-background/50 p-4 text-sm leading-6 text-muted-foreground">
                 Stay in fullscreen, keep this tab active, and answer without copying or pasting.
-                Repeated violations can automatically submit the assessment.
+                Prohibited activity is recorded for recruiter review, but it will not lock the
+                interview.
               </div>
 
               <Button className="w-full gap-2" size="lg" onClick={handleStart} disabled={isStarting}>
@@ -337,14 +335,14 @@ export default function AssessmentGate({ streamCallId, onCompleted }: Assessment
             {passed ? (
               <CheckCircle2Icon className="size-7 text-emerald-400" />
             ) : (
-              <XCircleIcon className="size-7 text-destructive" />
+              <AlertTriangleIcon className="size-7 text-yellow-500" />
             )}
           </div>
           <h1 className="mt-5 text-2xl font-bold tracking-tight">Assessment Submitted</h1>
           <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
             {passed
               ? "You passed the QCM gate and can continue to the interview room."
-              : "Your QCM score did not reach the required threshold. The recruiting team can review your result."}
+              : "Your QCM score did not reach the required threshold. You can still continue to the interview room while the recruiting team reviews your result."}
           </p>
 
           <div className="mt-6 grid gap-3 sm:grid-cols-3">
@@ -357,15 +355,9 @@ export default function AssessmentGate({ streamCallId, onCompleted }: Assessment
             </ResultTile>
           </div>
 
-          {passed ? (
-            <Button className="mt-6 w-full" size="lg" onClick={onCompleted}>
-              Enter Interview Room
-            </Button>
-          ) : (
-            <Badge className="mt-6" variant="destructive">
-              Interview locked
-            </Badge>
-          )}
+          <Button className="mt-6 w-full" size="lg" onClick={onCompleted}>
+            Enter Interview Room
+          </Button>
         </section>
       </main>
     );
