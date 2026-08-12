@@ -3,7 +3,7 @@
 import { FormEvent, useMemo, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
-import { Id } from "../../../convex/_generated/dataModel";
+import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { sendApplicationRejectionEmail } from "@/actions/application.actions";
 import { sendInterviewInvite } from "@/actions/invite.actions";
 import LoaderUI from "@/components/LoaderUI";
@@ -41,9 +41,11 @@ import { useStreamVideoClient } from "@stream-io/video-react-sdk";
 import { format } from "date-fns";
 import {
   ArrowLeftIcon,
+  AlertTriangleIcon,
   BriefcaseBusinessIcon,
   CalendarIcon,
   CheckCircle2Icon,
+  ClockIcon,
   ExternalLinkIcon,
   FileTextIcon,
   GithubIcon,
@@ -53,6 +55,7 @@ import {
   MailIcon,
   PhoneIcon,
   SendIcon,
+  ShieldCheckIcon,
   UserIcon,
   XCircleIcon,
 } from "lucide-react";
@@ -123,6 +126,14 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
   const application = useQuery(api.applications.getApplicationById, {
     id: convexApplicationId,
   });
+  const scheduledInterview = useQuery(
+    api.interviews.getInterviewByApplicationId,
+    application ? { applicationId: application._id } : "skip"
+  );
+  const assessmentReport = useQuery(
+    api.assessments.getAssessmentReportByInterview,
+    scheduledInterview ? { interviewId: scheduledInterview._id } : "skip"
+  );
   const updateApplicationStatus = useMutation(api.applications.updateApplicationStatus);
   const createInterview = useMutation(api.interviews.createInterview);
   const client = useStreamVideoClient();
@@ -436,6 +447,95 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
 
           <Card>
             <CardHeader>
+              <div className="flex items-center justify-between gap-3">
+                <CardTitle>QCM Assessment</CardTitle>
+                {assessmentReport?.attempt && (
+                  <Badge variant={assessmentReport.attempt.passed ? "default" : "destructive"}>
+                    {assessmentReport.attempt.passed ? "Passed" : "Failed"}
+                  </Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {!scheduledInterview ? (
+                <p className="text-sm leading-6 text-muted-foreground">
+                  Schedule a technical interview to activate the candidate QCM gate.
+                </p>
+              ) : assessmentReport === undefined ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <Loader2Icon className="size-4 animate-spin" />
+                  Loading assessment result
+                </div>
+              ) : assessmentReport?.attempt ? (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-3">
+                    <AssessmentMetric
+                      icon={<ShieldCheckIcon className="size-4 text-primary" />}
+                      label="Score"
+                    >
+                      {assessmentReport.attempt.score ?? 0}%
+                    </AssessmentMetric>
+                    <AssessmentMetric
+                      icon={<CheckCircle2Icon className="size-4 text-emerald-400" />}
+                      label="Correct"
+                    >
+                      {assessmentReport.attempt.correctAnswers ?? 0}/
+                      {assessmentReport.attempt.totalQuestions}
+                    </AssessmentMetric>
+                    <AssessmentMetric
+                      icon={<ClockIcon className="size-4 text-accent" />}
+                      label="Duration"
+                    >
+                      {formatAssessmentDuration(
+                        assessmentReport.attempt.startedAt,
+                        assessmentReport.attempt.submittedAt
+                      )}
+                    </AssessmentMetric>
+                  </div>
+
+                  <div className="rounded-lg border border-border/70 bg-background/45 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-sm font-semibold">Exam Events</p>
+                      <Badge
+                        variant={assessmentReport.events.length > 0 ? "destructive" : "secondary"}
+                      >
+                        {assessmentReport.events.length}
+                      </Badge>
+                    </div>
+                    {assessmentReport.events.length > 0 ? (
+                      <div className="mt-3 space-y-2">
+                        {assessmentReport.events.slice(0, 5).map((event: Doc<"assessmentEvents">) => (
+                          <div
+                            key={event._id}
+                            className="flex items-start gap-2 rounded-md border border-border/70 bg-card/50 p-2 text-sm"
+                          >
+                            <AlertTriangleIcon className="mt-0.5 size-4 shrink-0 text-yellow-500" />
+                            <div>
+                              <p className="font-medium">{formatAssessmentEvent(event.type)}</p>
+                              <p className="text-xs text-muted-foreground">
+                                {format(new Date(event.createdAt), "MMM d · h:mm:ss a")}
+                              </p>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        No suspicious exam events were recorded.
+                      </p>
+                    )}
+                  </div>
+                </>
+              ) : (
+                <p className="text-sm leading-6 text-muted-foreground">
+                  The candidate has not started the QCM assessment yet.
+                </p>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
               <CardTitle>Status Timeline</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3 text-sm">
@@ -589,6 +689,43 @@ function AnalysisList({ title, items }: { title: string; items: string[] }) {
       ) : (
         <p className="mt-2 text-sm text-muted-foreground">None detected</p>
       )}
+    </div>
+  );
+}
+
+function formatAssessmentDuration(startedAt?: number, submittedAt?: number) {
+  if (!startedAt || !submittedAt) return "--";
+
+  const seconds = Math.max(0, Math.round((submittedAt - startedAt) / 1000));
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+
+  return `${minutes}m ${String(remainingSeconds).padStart(2, "0")}s`;
+}
+
+function formatAssessmentEvent(type: string) {
+  return type
+    .split("_")
+    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
+    .join(" ");
+}
+
+function AssessmentMetric({
+  icon,
+  label,
+  children,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-border/70 bg-background/45 p-3">
+      <div className="flex items-center gap-2 text-xs text-muted-foreground">
+        {icon}
+        {label}
+      </div>
+      <p className="mt-2 text-lg font-bold">{children}</p>
     </div>
   );
 }

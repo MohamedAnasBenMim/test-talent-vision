@@ -120,4 +120,43 @@ export default defineSchema({
     updatedAt: v.number(),
     updatedBy: v.string(),
   }).index("by_stream_call_id", ["streamCallId"]),
+
+  assessmentAttempts: defineTable({
+    streamCallId: v.string(),
+    interviewId: v.id("interviews"),
+    candidateId: v.string(),
+    candidateEmail: v.optional(v.string()),
+    status: v.union(
+      v.literal("in_progress"),
+      v.literal("submitted"),
+      v.literal("auto_submitted")
+    ),
+    startedAt: v.number(),
+    expiresAt: v.number(),
+    submittedAt: v.optional(v.number()),
+    totalQuestions: v.number(),
+    correctAnswers: v.optional(v.number()),
+    score: v.optional(v.number()),
+    passed: v.optional(v.boolean()),
+    answers: v.array(
+      v.object({
+        questionId: v.string(),
+        selectedOptionId: v.string(),
+      })
+    ),
+  })
+    .index("by_stream_call_id", ["streamCallId"])
+    .index("by_interview_id", ["interviewId"])
+    .index("by_candidate_id", ["candidateId"]),
+
+  assessmentEvents: defineTable({
+    attemptId: v.id("assessmentAttempts"),
+    streamCallId: v.string(),
+    candidateId: v.string(),
+    type: v.string(),
+    message: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_attempt_id", ["attemptId"])
+    .index("by_stream_call_id", ["streamCallId"]),
 });

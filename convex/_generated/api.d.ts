@@ -10,6 +10,7 @@
 
 import type * as applicationAnalysis from "../applicationAnalysis.js";
 import type * as applications from "../applications.js";
+import type * as assessments from "../assessments.js";
 import type * as codeSessions from "../codeSessions.js";
 import type * as comments from "../comments.js";
 import type * as http from "../http.js";
@@ -25,6 +26,7 @@ import type {
 declare const fullApi: ApiFromModules<{
   applicationAnalysis: typeof applicationAnalysis;
   applications: typeof applications;
+  assessments: typeof assessments;
   codeSessions: typeof codeSessions;
   comments: typeof comments;
   http: typeof http;

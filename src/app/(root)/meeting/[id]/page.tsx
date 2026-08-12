@@ -6,7 +6,9 @@ import { Button } from "@/components/ui/button";
 import LoaderUI from "@/components/LoaderUI";
 import MeetingRoom from "@/components/MeetingRoom";
 import MeetingSetup from "@/components/MeetingSetup";
+import AssessmentGate from "@/components/assessments/AssessmentGate";
 import useGetCallById from "@/hooks/useGetCallById";
+import { useUserRole } from "@/hooks/useUserRole";
 import { getMeetingStatus } from "@/lib/utils";
 import { useUser } from "@clerk/nextjs";
 import { StreamCall, StreamTheme } from "@stream-io/video-react-sdk";
@@ -31,6 +33,7 @@ function formatStartsIn(startTime: number, now: number) {
 function MeetingPage() {
   const { id } = useParams();
   const { isLoaded } = useUser();
+  const { isCandidate, isLoading: isRoleLoading } = useUserRole();
   const streamCallId = Array.isArray(id) ? id[0] : id;
   const { call, isCallLoading } = useGetCallById(streamCallId);
   const interview = useQuery(
@@ -40,6 +43,7 @@ function MeetingPage() {
 
   const [isSetupComplete, setIsSetupComplete] = useState(false);
   const [isEntryConfirmed, setIsEntryConfirmed] = useState(false);
+  const [isAssessmentPassed, setIsAssessmentPassed] = useState(false);
   const [now, setNow] = useState(Date.now());
 
   useEffect(() => {
@@ -47,7 +51,7 @@ function MeetingPage() {
     return () => window.clearInterval(interval);
   }, []);
 
-  if (!isLoaded || isCallLoading || interview === undefined) return <LoaderUI />;
+  if (!isLoaded || isRoleLoading || isCallLoading || interview === undefined) return <LoaderUI />;
 
   if (!call) {
     return (
@@ -69,6 +73,18 @@ function MeetingPage() {
           status="completed"
           startsIn="Time ended"
           onEnter={() => {}}
+        />
+      );
+    }
+
+    if (isCandidate && status === "live" && !isAssessmentPassed) {
+      return (
+        <AssessmentGate
+          streamCallId={streamCallId}
+          onCompleted={() => {
+            setIsAssessmentPassed(true);
+            setIsEntryConfirmed(true);
+          }}
         />
       );
     }

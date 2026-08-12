@@ -180,11 +180,16 @@ function CodeEditor() {
   const starterCode = selectedQuestion.starterCode[language];
   const hasCandidateInput = code.trim() !== "" && code.trim() !== starterCode.trim();
   const reviewerCode = hasCandidateInput ? code : "";
+  const userEmail = user?.primaryEmailAddress?.emailAddress?.trim().toLowerCase();
 
   const canEdit =
     Boolean(user?.id) &&
     Boolean(isCandidate) &&
-    (interview === null || (interview !== undefined && interview.candidateId === user?.id));
+    (interview === null ||
+      (interview !== undefined &&
+        (interview.candidateId === user?.id ||
+          Boolean(userEmail && interview.candidateId.toLowerCase() === userEmail) ||
+          Boolean(userEmail && interview.candidateEmail?.toLowerCase() === userEmail))));
 
   const isReviewerView = !isRoleLoading && (isInterviewer || !canEdit);
 

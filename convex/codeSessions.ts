@@ -27,7 +27,18 @@ export const upsert = mutation({
     if (!identity) throw new Error("Unauthorized");
 
     const interview = args.interviewId ? await ctx.db.get(args.interviewId) : null;
-    if (interview && interview.candidateId !== identity.subject) {
+    const currentUser = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+    const email = (identity.email ?? currentUser?.email)?.trim().toLowerCase();
+    const isInterviewCandidate =
+      interview &&
+      (interview.candidateId === identity.subject ||
+        Boolean(email && interview.candidateId.toLowerCase() === email) ||
+        Boolean(email && interview.candidateEmail?.toLowerCase() === email));
+
+    if (interview && !isInterviewCandidate) {
       throw new Error("Only the candidate can update this code session");
     }
 

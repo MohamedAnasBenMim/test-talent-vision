@@ -17,12 +17,26 @@ export const getMyInterviews = query({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) return [];
 
-    const interviews = await ctx.db
+    const currentUser = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
+      .first();
+
+    const interviewsByClerkId = await ctx.db
       .query("interviews")
       .withIndex("by_candidate_id", (q) => q.eq("candidateId", identity.subject))
       .collect();
 
-    return interviews!;
+    const email = (identity.email ?? currentUser?.email)?.trim().toLowerCase();
+    const interviewsByEmail = email
+      ? await ctx.db
+          .query("interviews")
+          .withIndex("by_candidate_id", (q) => q.eq("candidateId", email))
+          .collect()
+      : [];
+
+    const allInterviews = [...interviewsByClerkId, ...interviewsByEmail];
+    return Array.from(new Map(allInterviews.map((interview) => [interview._id, interview])).values());
   },
 });
 
@@ -32,6 +46,19 @@ export const getInterviewByStreamCallId = query({
     return await ctx.db
       .query("interviews")
       .withIndex("by_stream_call_id", (q) => q.eq("streamCallId", args.streamCallId))
+      .first();
+  },
+});
+
+export const getInterviewByApplicationId = query({
+  args: { applicationId: v.id("applications") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    return await ctx.db
+      .query("interviews")
+      .withIndex("by_application_id", (q) => q.eq("applicationId", args.applicationId))
       .first();
   },
 });
