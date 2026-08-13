@@ -159,4 +159,19 @@ export default defineSchema({
   })
     .index("by_attempt_id", ["attemptId"])
     .index("by_stream_call_id", ["streamCallId"]),
+
+  assessmentRecordings: defineTable({
+    attemptId: v.id("assessmentAttempts"),
+    streamCallId: v.string(),
+    candidateId: v.string(),
+    candidateEmail: v.optional(v.string()),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    fileSize: v.number(),
+    mimeType: v.string(),
+    durationMs: v.optional(v.number()),
+    createdAt: v.number(),
+  })
+    .index("by_attempt_id", ["attemptId"])
+    .index("by_stream_call_id", ["streamCallId"]),
 });

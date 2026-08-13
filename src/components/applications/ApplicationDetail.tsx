@@ -57,6 +57,7 @@ import {
   SendIcon,
   ShieldCheckIcon,
   UserIcon,
+  VideoIcon,
   XCircleIcon,
 } from "lucide-react";
 import Link from "next/link";
@@ -158,9 +159,7 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
     setScheduleForm((prev) => ({
       ...prev,
       title: prev.title || defaultTitle,
-      description:
-        prev.description ||
-        `Technical interview for ${application?.fullName} applying as ${application?.position}.`,
+      description: prev.description,
     }));
     setIsScheduleOpen(true);
   };
@@ -491,6 +490,30 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
                         assessmentReport.attempt.submittedAt
                       )}
                     </AssessmentMetric>
+                  </div>
+
+                  <div className="rounded-lg border border-border/70 bg-background/45 p-3">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="flex items-center gap-2 text-sm font-semibold">
+                        <VideoIcon className="size-4 text-primary" />
+                        Camera Recording
+                      </p>
+                      <Badge variant={assessmentReport.recording?.url ? "secondary" : "outline"}>
+                        QCM proctoring
+                      </Badge>
+                    </div>
+                    {assessmentReport.recording?.url ? (
+                      <video
+                        controls
+                        preload="metadata"
+                        src={assessmentReport.recording.url}
+                        className="mt-3 aspect-video w-full rounded-md border border-border/70 bg-black"
+                      />
+                    ) : (
+                      <p className="mt-2 text-sm text-muted-foreground">
+                        No camera recording was saved for this attempt.
+                      </p>
+                    )}
                   </div>
 
                   <div className="rounded-lg border border-border/70 bg-background/45 p-3">

@@ -3,12 +3,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
+import { Id } from "../../../convex/_generated/dataModel";
 import LoaderUI from "@/components/LoaderUI";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
   AlertTriangleIcon,
+  CameraIcon,
   CheckCircle2Icon,
   ClockIcon,
   LockIcon,
@@ -72,6 +81,27 @@ async function requestFullscreenMode() {
   }
 }
 
+function getSupportedRecordingMimeType() {
+  if (typeof MediaRecorder === "undefined") return "";
+
+  const preferredTypes = [
+    "video/webm;codecs=vp9",
+    "video/webm;codecs=vp8",
+    "video/webm",
+    "video/mp4",
+  ];
+
+  return preferredTypes.find((type) => MediaRecorder.isTypeSupported(type)) ?? "";
+}
+
+function getRecordingExtension(mimeType: string) {
+  return mimeType.includes("mp4") ? "mp4" : "webm";
+}
+
+function getRecordingUploadMimeType(mimeType: string) {
+  return mimeType.includes("mp4") ? "video/mp4" : "video/webm";
+}
+
 export default function AssessmentGate({ streamCallId, onCompleted }: AssessmentGateProps) {
   const examState = useQuery(
     api.assessments.getExamState,
@@ -81,12 +111,25 @@ export default function AssessmentGate({ streamCallId, onCompleted }: Assessment
   const saveAnswer = useMutation(api.assessments.saveAnswer);
   const submitAttempt = useMutation(api.assessments.submitAttempt);
   const logEvent = useMutation(api.assessments.logEvent);
+  const generateRecordingUploadUrl = useMutation(api.assessments.generateRecordingUploadUrl);
+  const saveAssessmentRecording = useMutation(api.assessments.saveAssessmentRecording);
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [isStarting, setIsStarting] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isCameraDialogOpen, setIsCameraDialogOpen] = useState(false);
+  const [isCameraStarting, setIsCameraStarting] = useState(false);
+  const [cameraStream, setCameraStream] = useState<MediaStream | null>(null);
+  const [cameraError, setCameraError] = useState("");
   const [now, setNow] = useState(Date.now());
+  const cameraPreviewRef = useRef<HTMLVideoElement | null>(null);
   const lastEventAt = useRef<Record<string, number>>({});
   const timeSubmitTriggered = useRef(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingChunksRef = useRef<BlobPart[]>([]);
+  const recordingStartedAtRef = useRef<number | null>(null);
+  const recordingAttemptIdRef = useRef<Id<"assessmentAttempts"> | null>(null);
+  const recordingStreamRef = useRef<MediaStream | null>(null);
+  const recordingUploadPromiseRef = useRef<Promise<boolean> | null>(null);
 
   const attempt = examState?.attempt;
   const isInProgress = attempt?.status === "in_progress";
@@ -116,6 +159,202 @@ export default function AssessmentGate({ streamCallId, onCompleted }: Assessment
     return () => window.clearInterval(interval);
   }, []);
 
+  const stopCameraPreview = () => {
+    setCameraStream((currentStream) => {
+      currentStream?.getTracks().forEach((track) => track.stop());
+      return null;
+    });
+  };
+
+  useEffect(() => {
+    if (!cameraPreviewRef.current) return;
+    cameraPreviewRef.current.srcObject = cameraStream;
+  }, [cameraStream]);
+
+  useEffect(() => {
+    return () => {
+      stopCameraPreview();
+      stopAssessmentRecordingOnCleanup();
+    };
+  }, []);
+
+  const startCameraPreview = async () => {
+    setCameraError("");
+    setIsCameraStarting(true);
+    stopCameraPreview();
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: false,
+      });
+      setCameraStream(stream);
+    } catch (error) {
+      console.error(error);
+      setCameraError("Camera access is required before starting the assessment.");
+      toast.error("Camera access is required before starting the assessment.");
+    } finally {
+      setIsCameraStarting(false);
+    }
+  };
+
+  const openCameraCheck = () => {
+    setIsCameraDialogOpen(true);
+    void startCameraPreview();
+  };
+
+  const stopRecordingStream = () => {
+    recordingStreamRef.current?.getTracks().forEach((track) => track.stop());
+    recordingStreamRef.current = null;
+  };
+
+  const uploadAssessmentRecording = async ({
+    attemptId,
+    chunks,
+    durationMs,
+    mimeType,
+  }: {
+    attemptId: Id<"assessmentAttempts">;
+    chunks: BlobPart[];
+    durationMs?: number;
+    mimeType: string;
+  }) => {
+    const uploadMimeType = getRecordingUploadMimeType(mimeType);
+    const blob = new Blob(chunks, { type: uploadMimeType });
+
+    try {
+      if (!blob.size) return false;
+
+      const uploadUrl = await generateRecordingUploadUrl();
+      const response = await fetch(uploadUrl, {
+        method: "POST",
+        headers: { "Content-Type": uploadMimeType },
+        body: blob,
+      });
+
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => "");
+        throw new Error(
+          `Recording upload failed (${response.status})${errorText ? `: ${errorText}` : ""}`
+        );
+      }
+
+      const { storageId } = (await response.json()) as { storageId: Id<"_storage"> };
+      const extension = getRecordingExtension(blob.type);
+
+      await saveAssessmentRecording({
+        attemptId,
+        streamCallId,
+        storageId,
+        fileName: `assessment-recording-${streamCallId}.${extension}`,
+        fileSize: blob.size,
+        mimeType: uploadMimeType,
+        durationMs,
+      });
+
+      toast.success("Assessment recording saved");
+      return true;
+    } catch (error) {
+      console.error("Failed to save assessment recording:", error);
+      toast.error(
+        error instanceof Error ? error.message : "Assessment recording could not be saved."
+      );
+      return false;
+    } finally {
+      stopRecordingStream();
+    }
+  };
+
+  const startAssessmentRecording = (stream: MediaStream, attemptId: Id<"assessmentAttempts">) => {
+    if (typeof MediaRecorder === "undefined") {
+      throw new Error("Camera recording is not supported in this browser.");
+    }
+
+    const mimeType = getSupportedRecordingMimeType();
+    const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+
+    recordingStreamRef.current = stream;
+    recordingAttemptIdRef.current = attemptId;
+    recordingStartedAtRef.current = Date.now();
+    recordingChunksRef.current = [];
+
+    recorder.ondataavailable = (event) => {
+      if (event.data.size > 0) {
+        recordingChunksRef.current.push(event.data);
+      }
+    };
+
+    recorder.onerror = (event) => {
+      console.error("Assessment recording error:", event);
+      toast.error("Assessment recording was interrupted.");
+    };
+
+    recorder.onstop = () => {
+      const attemptIdForUpload = recordingAttemptIdRef.current;
+      const startedAt = recordingStartedAtRef.current;
+      const durationMs = startedAt ? Date.now() - startedAt : undefined;
+      const chunks = [...recordingChunksRef.current];
+      const recordedMimeType = recorder.mimeType || mimeType || "video/webm";
+
+      mediaRecorderRef.current = null;
+      recordingAttemptIdRef.current = null;
+      recordingStartedAtRef.current = null;
+      recordingChunksRef.current = [];
+
+      if (!attemptIdForUpload) {
+        stopRecordingStream();
+        return;
+      }
+
+      const uploadPromise = uploadAssessmentRecording({
+        attemptId: attemptIdForUpload,
+        chunks,
+        durationMs,
+        mimeType: recordedMimeType,
+      });
+
+      recordingUploadPromiseRef.current = uploadPromise;
+      void uploadPromise.finally(() => {
+        if (recordingUploadPromiseRef.current === uploadPromise) {
+          recordingUploadPromiseRef.current = null;
+        }
+      });
+    };
+
+    recorder.start(1000);
+    mediaRecorderRef.current = recorder;
+  };
+
+  const stopAssessmentRecording = async () => {
+    const recorder = mediaRecorderRef.current;
+
+    if (recorder && recorder.state !== "inactive") {
+      await new Promise<void>((resolve) => {
+        recorder.addEventListener("stop", () => resolve(), { once: true });
+        recorder.stop();
+      });
+    } else {
+      stopRecordingStream();
+    }
+
+    if (recordingUploadPromiseRef.current) {
+      return await recordingUploadPromiseRef.current;
+    }
+
+    return true;
+  };
+
+  const stopAssessmentRecordingOnCleanup = () => {
+    const recorder = mediaRecorderRef.current;
+
+    if (recorder && recorder.state !== "inactive") {
+      recorder.stop();
+      return;
+    }
+
+    stopRecordingStream();
+  };
+
   const submit = async (autoSubmitted = false) => {
     if (!isInProgress || isSubmitting) return;
 
@@ -130,7 +369,11 @@ export default function AssessmentGate({ streamCallId, onCompleted }: Assessment
         });
       }
 
+      const recordingSaved = await stopAssessmentRecording();
       await submitAttempt({ streamCallId, autoSubmitted });
+      if (!recordingSaved) {
+        toast.error("Assessment submitted, but the recording was not saved.");
+      }
       toast.success(autoSubmitted ? "Assessment auto-submitted" : "Assessment submitted");
     } catch (error) {
       console.error(error);
@@ -218,16 +461,35 @@ export default function AssessmentGate({ streamCallId, onCompleted }: Assessment
     };
   }, [isInProgress, examState?.warningCount]);
 
-  const handleStart = async () => {
+  const handleStartAssessment = async () => {
+    if (!cameraStream) {
+      setCameraError("Open your camera and confirm you can see yourself first.");
+      return;
+    }
+
+    if (typeof MediaRecorder === "undefined") {
+      setCameraError("Camera recording is not supported in this browser.");
+      return;
+    }
+
     setIsStarting(true);
 
     try {
+      const activeCameraStream = cameraStream;
       await requestFullscreenMode();
-      await startAttempt({ streamCallId });
+      const attemptId = await startAttempt({ streamCallId });
+      startAssessmentRecording(activeCameraStream, attemptId);
+      if (cameraPreviewRef.current) {
+        cameraPreviewRef.current.srcObject = null;
+      }
+      setCameraStream(null);
+      setIsCameraDialogOpen(false);
       toast.success("Assessment started");
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : "Failed to start assessment");
+      const message = error instanceof Error ? error.message : "Failed to start assessment";
+      setCameraError(message);
+      toast.error(message);
     } finally {
       setIsStarting(false);
     }
@@ -300,21 +562,34 @@ export default function AssessmentGate({ streamCallId, onCompleted }: Assessment
 
               <div className="rounded-lg border border-border/70 bg-background/50 p-4 text-sm leading-6 text-muted-foreground">
                 Stay in fullscreen, keep this tab active, and answer without copying or pasting.
-                Prohibited activity is recorded for recruiter review, but it will not lock the
-                interview.
+                Prohibited activity and your camera recording are saved for recruiter review, but
+                they will not lock the interview.
               </div>
 
-              <Button className="w-full gap-2" size="lg" onClick={handleStart} disabled={isStarting}>
-                {isStarting ? (
-                  <ClockIcon className="size-4 animate-spin" />
-                ) : (
-                  <LockIcon className="size-4" />
-                )}
+              <Button className="w-full gap-2" size="lg" onClick={openCameraCheck}>
+                <CameraIcon className="size-4" />
                 Start Assessment
               </Button>
             </CardContent>
           </Card>
         </section>
+        <CameraCheckDialog
+          cameraError={cameraError}
+          cameraStream={cameraStream}
+          isCameraDialogOpen={isCameraDialogOpen}
+          isCameraStarting={isCameraStarting}
+          isStarting={isStarting}
+          onOpenChange={(open) => {
+            setIsCameraDialogOpen(open);
+            if (!open && !mediaRecorderRef.current) {
+              stopCameraPreview();
+              setCameraError("");
+            }
+          }}
+          onRetryCamera={startCameraPreview}
+          onStartAssessment={handleStartAssessment}
+          previewRef={cameraPreviewRef}
+        />
       </main>
     );
   }
@@ -453,6 +728,107 @@ export default function AssessmentGate({ streamCallId, onCompleted }: Assessment
         </div>
       </section>
     </main>
+  );
+}
+
+function CameraCheckDialog({
+  cameraError,
+  cameraStream,
+  isCameraDialogOpen,
+  isCameraStarting,
+  isStarting,
+  onOpenChange,
+  onRetryCamera,
+  onStartAssessment,
+  previewRef,
+}: {
+  cameraError: string;
+  cameraStream: MediaStream | null;
+  isCameraDialogOpen: boolean;
+  isCameraStarting: boolean;
+  isStarting: boolean;
+  onOpenChange: (open: boolean) => void;
+  onRetryCamera: () => void;
+  onStartAssessment: () => void;
+  previewRef: React.RefObject<HTMLVideoElement>;
+}) {
+  const hasCamera = Boolean(cameraStream);
+
+  return (
+    <Dialog open={isCameraDialogOpen} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[calc(100vh-80px)] overflow-auto sm:max-w-[680px]">
+        <DialogHeader>
+          <DialogTitle>Camera Check Required</DialogTitle>
+          <DialogDescription>
+            Open your camera before starting the assessment. Your camera will be recorded during
+            the QCM for recruiter review. Did you see yourself?
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <div className="relative aspect-video overflow-hidden rounded-lg border border-border/70 bg-slate-950">
+            {hasCamera ? (
+              <video
+                ref={previewRef}
+                autoPlay
+                muted
+                playsInline
+                className="h-full w-full object-cover"
+              />
+            ) : (
+              <div className="flex h-full flex-col items-center justify-center gap-3 p-6 text-center">
+                <div className="grid size-12 place-items-center rounded-md border border-primary/25 bg-primary/10">
+                  <CameraIcon className="size-6 text-primary" />
+                </div>
+                <p className="text-sm text-muted-foreground">
+                  Camera preview will appear here after permission is granted.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {cameraError && (
+            <div className="rounded-lg border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+              {cameraError}
+            </div>
+          )}
+
+          <div className="rounded-lg border border-border/70 bg-background/50 p-4 text-sm leading-6 text-muted-foreground">
+            If you do not see yourself, allow camera permission in the browser, close any other app
+            using the camera, then click Retry Camera. The assessment cannot start until the camera
+            is opened and recording is supported.
+          </div>
+
+          <div className="flex flex-col gap-3 sm:flex-row sm:justify-end">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={onRetryCamera}
+              disabled={isCameraStarting || isStarting}
+            >
+              {isCameraStarting ? (
+                <ClockIcon className="size-4 animate-spin" />
+              ) : (
+                <CameraIcon className="size-4" />
+              )}
+              Retry Camera
+            </Button>
+            <Button
+              type="button"
+              onClick={onStartAssessment}
+              disabled={!hasCamera || isCameraStarting || isStarting}
+            >
+              {isStarting ? (
+                <ClockIcon className="size-4 animate-spin" />
+              ) : (
+                <CheckCircle2Icon className="size-4" />
+              )}
+              Yes, Start Assessment
+            </Button>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 

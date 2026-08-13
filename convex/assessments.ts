@@ -163,6 +163,28 @@ async function getAttemptEvents(ctx: any, attemptId: Id<"assessmentAttempts">) {
     .collect();
 }
 
+async function getAttemptRecording(ctx: any, attemptId: Id<"assessmentAttempts">) {
+  const recordings = await ctx.db
+    .query("assessmentRecordings")
+    .withIndex("by_attempt_id", (q: any) => q.eq("attemptId", attemptId))
+    .collect();
+
+  const recording =
+    recordings.sort(
+      (a: Doc<"assessmentRecordings">, b: Doc<"assessmentRecordings">) =>
+        b.createdAt - a.createdAt
+    )[0] ?? null;
+
+  if (!recording) return null;
+
+  const url = await ctx.storage.getUrl(recording.storageId);
+
+  return {
+    ...recording,
+    url,
+  };
+}
+
 function scoreAnswers(answers: AssessmentAnswer[]) {
   const correctAnswers = QUESTION_BANK.reduce((count, question) => {
     const answer = answers.find((item) => item.questionId === question.id);
@@ -378,6 +400,54 @@ export const logEvent = mutation({
   },
 });
 
+export const generateRecordingUploadUrl = mutation({
+  args: {},
+  handler: async (ctx) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    return await ctx.storage.generateUploadUrl();
+  },
+});
+
+export const saveAssessmentRecording = mutation({
+  args: {
+    attemptId: v.id("assessmentAttempts"),
+    streamCallId: v.string(),
+    storageId: v.id("_storage"),
+    fileName: v.string(),
+    fileSize: v.number(),
+    mimeType: v.string(),
+    durationMs: v.optional(v.number()),
+  },
+  handler: async (ctx, args) => {
+    const { identity, currentUser, isCandidate } = await getAuthorizedInterview(
+      ctx,
+      args.streamCallId
+    );
+    if (!isCandidate) throw new Error("Only the candidate can save assessment recordings");
+
+    const attempt = await findAttemptForIdentity(ctx, args.streamCallId, identity, currentUser);
+    if (!attempt) throw new Error("No assessment attempt found");
+    if (attempt._id !== args.attemptId) {
+      throw new Error("Recording does not match this assessment attempt");
+    }
+
+    await ctx.db.insert("assessmentRecordings", {
+      attemptId: args.attemptId,
+      streamCallId: args.streamCallId,
+      candidateId: identity.subject,
+      candidateEmail: getIdentityEmail(identity, currentUser),
+      storageId: args.storageId,
+      fileName: args.fileName,
+      fileSize: args.fileSize,
+      mimeType: args.mimeType,
+      durationMs: args.durationMs,
+      createdAt: Date.now(),
+    });
+  },
+});
+
 export const getAssessmentReportByInterview = query({
   args: { interviewId: v.id("interviews") },
   handler: async (ctx, args) => {
@@ -398,12 +468,14 @@ export const getAssessmentReportByInterview = query({
     if (!attempt) return null;
 
     const events = await getAttemptEvents(ctx, attempt._id);
+    const recording = await getAttemptRecording(ctx, attempt._id);
 
     return {
       attempt,
       events: events.sort(
         (a: Doc<"assessmentEvents">, b: Doc<"assessmentEvents">) => a.createdAt - b.createdAt
       ),
+      recording,
       passScore: PASS_SCORE,
     };
   },
@@ -443,12 +515,14 @@ export const getAssessmentReportByApplication = query({
     if (!attempt) return null;
 
     const events = await getAttemptEvents(ctx, attempt._id);
+    const recording = await getAttemptRecording(ctx, attempt._id);
 
     return {
       attempt,
       events: events.sort(
         (a: Doc<"assessmentEvents">, b: Doc<"assessmentEvents">) => a.createdAt - b.createdAt
       ),
+      recording,
       passScore: PASS_SCORE,
     };
   },
