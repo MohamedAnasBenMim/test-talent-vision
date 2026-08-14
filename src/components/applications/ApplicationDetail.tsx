@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { sendApplicationRejectionEmail } from "@/actions/application.actions";
@@ -54,6 +54,7 @@ import {
   Loader2Icon,
   MailIcon,
   PhoneIcon,
+  RefreshCcwIcon,
   SendIcon,
   ShieldCheckIcon,
   UserIcon,
@@ -135,11 +136,13 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
     api.assessments.getAssessmentReportByApplication,
     application ? { applicationId: application._id } : "skip"
   );
+  const rerunApplicationAnalysis = useAction(api.applicationAnalysis.rerunApplicationAnalysis);
   const updateApplicationStatus = useMutation(api.applications.updateApplicationStatus);
   const createInterview = useMutation(api.interviews.createInterview);
   const client = useStreamVideoClient();
   const { user } = useUser();
   const [isRejecting, setIsRejecting] = useState(false);
+  const [isRerunningAnalysis, setIsRerunningAnalysis] = useState(false);
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
   const [scheduleForm, setScheduleForm] = useState({
@@ -185,6 +188,22 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
       toast.error(error instanceof Error ? error.message : "Failed to reject candidate");
     } finally {
       setIsRejecting(false);
+    }
+  };
+
+  const handleRerunAnalysis = async () => {
+    if (!application) return;
+
+    setIsRerunningAnalysis(true);
+
+    try {
+      await rerunApplicationAnalysis({ id: application._id });
+      toast.success("AI screening completed");
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Failed to run AI screening");
+    } finally {
+      setIsRerunningAnalysis(false);
     }
   };
 
@@ -375,11 +394,26 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
             <CardHeader>
               <div className="flex items-center justify-between gap-3">
                 <CardTitle>AI Screening</CardTitle>
-                {recommendation && (
-                  <Badge variant={getAiRecommendationVariant(recommendation)}>
-                    {AI_RECOMMENDATION_LABELS[recommendation]}
-                  </Badge>
-                )}
+                <div className="flex items-center gap-2">
+                  {recommendation && (
+                    <Badge variant={getAiRecommendationVariant(recommendation)}>
+                      {AI_RECOMMENDATION_LABELS[recommendation]}
+                    </Badge>
+                  )}
+                  <Button
+                    size="sm"
+                    variant="outline"
+                    disabled={isRerunningAnalysis || application.status === "cv_analyzing"}
+                    onClick={handleRerunAnalysis}
+                  >
+                    {isRerunningAnalysis || application.status === "cv_analyzing" ? (
+                      <Loader2Icon className="size-4 animate-spin" />
+                    ) : (
+                      <RefreshCcwIcon className="size-4" />
+                    )}
+                    Retry
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">

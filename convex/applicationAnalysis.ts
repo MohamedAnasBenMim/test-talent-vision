@@ -1,6 +1,6 @@
 "use node";
 
-import { internalAction } from "./_generated/server";
+import { action, internalAction } from "./_generated/server";
 import { internal } from "./_generated/api";
 import { v } from "convex/values";
 import { Doc, Id } from "./_generated/dataModel";
@@ -29,6 +29,21 @@ type CvAnalysisResult = {
   concerns: string[];
   decisionReason: string;
 };
+
+const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
+const GEMINI_FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"];
+const GEMINI_MAX_ATTEMPTS = 3;
+const GEMINI_RETRY_BASE_DELAY_MS = 1200;
+
+class GeminiRequestError extends Error {
+  status?: number;
+
+  constructor(message: string, status?: number) {
+    super(message);
+    this.name = "GeminiRequestError";
+    this.status = status;
+  }
+}
 
 const ANALYSIS_RESPONSE_SCHEMA = {
   type: "object",
@@ -59,6 +74,26 @@ const ANALYSIS_RESPONSE_SCHEMA = {
     "decisionReason",
   ],
 };
+
+export const rerunApplicationAnalysis = action({
+  args: { id: v.id("applications") },
+  handler: async (ctx, args) => {
+    await assertInterviewerForAnalysis(ctx);
+
+    const application = await ctx.runQuery(internal.applications.getApplicationInternal, {
+      id: args.id,
+    });
+
+    if (!application) throw new Error("Application not found");
+
+    const jobRequirements = await findJobRequirementsForApplication(ctx, application);
+    if (!jobRequirements) {
+      throw new Error("No job requirements found for this application");
+    }
+
+    return await runAiAnalysis(ctx, args.id, jobRequirements);
+  },
+});
 
 export const analyzeApplicationAfterSubmit = internalAction({
   args: { id: v.id("applications") },
@@ -132,59 +167,244 @@ async function runAiAnalysis(
 
   const fileBytes = Buffer.from(await cvBlob.arrayBuffer());
   const base64File = fileBytes.toString("base64");
-  const model = process.env.GEMINI_MODEL ?? "gemini-3.6-flash";
+  const model = process.env.GEMINI_MODEL ?? DEFAULT_GEMINI_MODEL;
   const mimeType = application.cvFileType || "application/pdf";
 
-  const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
-    {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        "x-goog-api-key": apiKey,
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: "user",
-            parts: [
-              {
-                text: buildAnalysisPrompt(application, requirements),
-              },
-              {
-                inlineData: {
-                  mimeType,
-                  data: base64File,
-                },
-              },
-            ],
-          },
-        ],
-        generationConfig: {
-          maxOutputTokens: 1400,
-          responseMimeType: "application/json",
-          responseSchema: ANALYSIS_RESPONSE_SCHEMA,
-        },
-      }),
-    }
-  );
-
-  if (!response.ok) {
-    const errorText = await response.text();
-    throw new Error(`Gemini analysis failed: ${errorText}`);
-  }
-
-  const payload = await response.json();
+  const { payload, model: analysisModel } = await requestGeminiAnalysis({
+    apiKey,
+    application,
+    base64File,
+    mimeType,
+    model,
+    requirements,
+  });
   const analysis = normalizeAnalysisResult(parseGeminiAnalysisJson(extractGeminiOutputText(payload)));
 
   await ctx.runMutation(internal.applications.saveAnalysisResult, {
     applicationId,
     jobId: requirements.jobId,
     ...analysis,
-    model,
+    model: analysisModel,
   });
 
   return analysis;
+}
+
+async function assertInterviewerForAnalysis(ctx: any) {
+  const identity = await ctx.auth.getUserIdentity();
+  if (!identity) throw new Error("Unauthorized");
+
+  const user = await ctx.runQuery(internal.applications.getUserByClerkIdInternal, {
+    clerkId: identity.subject,
+  });
+
+  if (user?.role !== "interviewer") {
+    throw new Error("Only interviewers can run AI analysis");
+  }
+}
+
+async function requestGeminiAnalysis({
+  apiKey,
+  application,
+  base64File,
+  mimeType,
+  model,
+  requirements,
+}: {
+  apiKey: string;
+  application: Doc<"applications">;
+  base64File: string;
+  mimeType: string;
+  model: string;
+  requirements: JobRequirements;
+}) {
+  const modelCandidates = getGeminiModelCandidates(model);
+  const variants = modelCandidates.flatMap((candidateModel) => [
+    { model: candidateModel, useResponseSchema: true },
+    { model: candidateModel, useResponseSchema: false },
+  ]);
+  let lastError = "Gemini analysis failed";
+
+  for (const variant of variants) {
+    try {
+      const payload = await requestGeminiVariant({
+        apiKey,
+        application,
+        base64File,
+        mimeType,
+        model: variant.model,
+        requirements,
+        useResponseSchema: variant.useResponseSchema,
+      });
+
+      return {
+        payload,
+        model: variant.useResponseSchema ? variant.model : `${variant.model} (json mode)`,
+      };
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "Gemini request failed";
+
+      if (!shouldTryNextGeminiVariant(error)) {
+        throw new Error(lastError);
+      }
+
+      console.warn(
+        `Gemini analysis variant failed for ${variant.model}${
+          variant.useResponseSchema ? " with schema" : " without schema"
+        }: ${lastError}`
+      );
+    }
+  }
+
+  throw new Error(
+    `Gemini analysis failed after trying fallback models. Last error: ${lastError}`
+  );
+}
+
+async function requestGeminiVariant({
+  apiKey,
+  application,
+  base64File,
+  mimeType,
+  model,
+  requirements,
+  useResponseSchema,
+}: {
+  apiKey: string;
+  application: Doc<"applications">;
+  base64File: string;
+  mimeType: string;
+  model: string;
+  requirements: JobRequirements;
+  useResponseSchema: boolean;
+}) {
+  const body = buildGeminiRequestBody({
+    application,
+    base64File,
+    mimeType,
+    requirements,
+    useResponseSchema,
+  });
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  let lastError = "Gemini analysis failed";
+
+  for (let attempt = 1; attempt <= GEMINI_MAX_ATTEMPTS; attempt += 1) {
+    try {
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "x-goog-api-key": apiKey,
+        },
+        body,
+      });
+
+      if (response.ok) {
+        return await response.json();
+      }
+
+      const errorText = await response.text();
+      lastError = `Gemini analysis failed (${response.status}): ${formatGeminiError(errorText)}`;
+
+      if (!isRetryableGeminiStatus(response.status) || attempt === GEMINI_MAX_ATTEMPTS) {
+        throw new GeminiRequestError(lastError, response.status);
+      }
+    } catch (error) {
+      lastError = error instanceof Error ? error.message : "Gemini request failed";
+
+      if (attempt === GEMINI_MAX_ATTEMPTS || !isRetryableGeminiError(error)) {
+        if (error instanceof GeminiRequestError) throw error;
+        throw new GeminiRequestError(lastError);
+      }
+    }
+
+    await sleep(GEMINI_RETRY_BASE_DELAY_MS * attempt);
+  }
+
+  throw new GeminiRequestError(lastError);
+}
+
+function buildGeminiRequestBody({
+  application,
+  base64File,
+  mimeType,
+  requirements,
+  useResponseSchema,
+}: {
+  application: Doc<"applications">;
+  base64File: string;
+  mimeType: string;
+  requirements: JobRequirements;
+  useResponseSchema: boolean;
+}) {
+  const generationConfig: Record<string, unknown> = {
+    maxOutputTokens: 1400,
+    responseMimeType: "application/json",
+  };
+
+  if (useResponseSchema) {
+    generationConfig.responseSchema = ANALYSIS_RESPONSE_SCHEMA;
+  }
+
+  return JSON.stringify({
+    contents: [
+      {
+        role: "user",
+        parts: [
+          {
+            text: buildAnalysisPrompt(application, requirements),
+          },
+          {
+            inlineData: {
+              mimeType,
+              data: base64File,
+            },
+          },
+        ],
+      },
+    ],
+    generationConfig,
+  });
+}
+
+function isRetryableGeminiStatus(status: number) {
+  return status === 429 || status === 500 || status === 502 || status === 503 || status === 504;
+}
+
+function isRetryableGeminiError(error: unknown) {
+  if (error instanceof GeminiRequestError) {
+    return !error.status || isRetryableGeminiStatus(error.status);
+  }
+
+  if (!(error instanceof Error)) return true;
+  return !error.message.startsWith("Gemini analysis failed (4");
+}
+
+function shouldTryNextGeminiVariant(error: unknown) {
+  if (!(error instanceof GeminiRequestError)) return true;
+  if (!error.status) return true;
+  return error.status !== 401 && error.status !== 403;
+}
+
+function getGeminiModelCandidates(configuredModel: string) {
+  return [configuredModel || DEFAULT_GEMINI_MODEL, DEFAULT_GEMINI_MODEL, ...GEMINI_FALLBACK_MODELS]
+    .map((model) => model.trim())
+    .filter((model, index, models) => model && models.indexOf(model) === index);
+}
+
+function formatGeminiError(errorText: string) {
+  try {
+    const parsed = JSON.parse(errorText);
+    const message = parsed.error?.message ?? errorText;
+    const status = parsed.error?.status ? ` (${parsed.error.status})` : "";
+    return `${message}${status}`;
+  } catch {
+    return errorText || "Unknown Gemini error";
+  }
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 function buildAnalysisPrompt(application: Doc<"applications">, job: JobRequirements) {
