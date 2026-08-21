@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { ArrowLeftIcon, BriefcaseBusinessIcon, GraduationCapIcon, LanguagesIcon, MapPinIcon } from "lucide-react";
 import Link from "next/link";
+import CandidateChatbot from "@/components/CandidateChatbot";
 
 export default function PublicJobDetail({ jobId }: { jobId: string }) {
   const job = useQuery(api.applications.getPublicJobByJobId, { jobId });
@@ -113,6 +114,8 @@ export default function PublicJobDetail({ jobId }: { jobId: string }) {
           <ApplicationForm jobId={job.jobId} defaultPosition={job.title} lockPosition />
         </section>
       </div>
+      
+      <CandidateChatbot jobId={job.jobId} />
     </div>
   );
 }

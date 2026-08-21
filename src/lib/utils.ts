@@ -54,6 +54,14 @@ export const getCandidateInfo = (
 };
 
 export const getInterviewerInfo = (users: User[], interviewerId: string) => {
+  if (interviewerId === "AI_SUPER_RECRUITER") {
+    return {
+      name: "AI Insights",
+      image: "",
+      initials: "AI",
+    };
+  }
+  
   const interviewer = users?.find((user) => user.clerkId === interviewerId);
   return {
     name: interviewer?.name || "Unknown Interviewer",

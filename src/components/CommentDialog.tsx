@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { Id } from "../../convex/_generated/dataModel";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery, useAction } from "convex/react";
 import { api } from "../../convex/_generated/api";
 import toast from "react-hot-toast";
-import { MessageSquareIcon, StarIcon } from "lucide-react";
+import { MessageSquareIcon, StarIcon, SparklesIcon, Loader2Icon } from "lucide-react";
 import {
   Dialog,
   DialogContent,
@@ -28,8 +28,27 @@ function CommentDialog({ interviewId }: { interviewId: Id<"interviews"> }) {
   const [rating, setRating] = useState("3");
 
   const addComment = useMutation(api.comments.addComment);
-  const users = useQuery(api.users.getUsers);
-  const existingComments = useQuery(api.comments.getComments, { interviewId });
+  const generateInsights = useAction((api as any).aiInsights?.generateInterviewInsights);
+  const [isGenerating, setIsGenerating] = useState(false);
+  
+  const users = useQuery(api.users.getUsers, isOpen ? {} : "skip");
+  const existingComments = useQuery(
+    api.comments.getComments,
+    isOpen ? { interviewId } : "skip"
+  );
+
+  const handleGenerateInsights = async () => {
+    setIsGenerating(true);
+    try {
+      await generateInsights({ interviewId });
+      toast.success("AI Insights generated successfully!");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to generate insights.");
+    } finally {
+      setIsGenerating(false);
+    }
+  };
 
   const handleSubmit = async () => {
     if (!comment.trim()) return toast.error("Please enter comment");
@@ -61,8 +80,6 @@ function CommentDialog({ interviewId }: { interviewId: Id<"interviews"> }) {
     </div>
   );
 
-  if (existingComments === undefined || users === undefined) return null;
-
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       {/* TRIGGER BUTTON */}
@@ -79,13 +96,34 @@ function CommentDialog({ interviewId }: { interviewId: Id<"interviews"> }) {
         </DialogHeader>
 
         <div className="space-y-6">
-          {existingComments.length > 0 && (
+          {existingComments === undefined || users === undefined ? (
+            <div className="rounded-lg border border-border/70 bg-background/45 p-4 text-sm text-muted-foreground">
+              Loading comments...
+            </div>
+          ) : existingComments.length > 0 ? (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <h4 className="text-sm font-medium">Previous Comments</h4>
-                <Badge variant="outline">
-                  {existingComments.length} Comment{existingComments.length !== 1 ? "s" : ""}
-                </Badge>
+                <div className="flex items-center gap-2">
+                  <h4 className="text-sm font-medium">Previous Comments</h4>
+                  <Badge variant="outline">
+                    {existingComments.length} Comment{existingComments.length !== 1 ? "s" : ""}
+                  </Badge>
+                </div>
+                
+                <Button 
+                  size="sm" 
+                  variant="outline" 
+                  className="h-8 text-xs" 
+                  onClick={handleGenerateInsights}
+                  disabled={isGenerating || existingComments.length === 0}
+                >
+                  {isGenerating ? (
+                    <Loader2Icon className="mr-1 size-3 animate-spin" />
+                  ) : (
+                    <SparklesIcon className="mr-1 size-3 text-purple-500" />
+                  )}
+                  AI Summary
+                </Button>
               </div>
 
               {/* DISPLAY EXISTING COMMENTS */}
@@ -117,6 +155,10 @@ function CommentDialog({ interviewId }: { interviewId: Id<"interviews"> }) {
                 </div>
               </ScrollArea>
             </div>
+          ) : (
+            <p className="rounded-lg border border-border/70 bg-background/45 p-4 text-sm text-muted-foreground">
+              No previous comments yet.
+            </p>
           )}
 
           <div className="space-y-4">

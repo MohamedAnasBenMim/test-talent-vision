@@ -1,5 +1,32 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalQuery, internalMutation } from "./_generated/server";
 import { v } from "convex/values";
+
+export const getCommentsInternal = internalQuery({
+  args: { interviewId: v.id("interviews") },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("comments")
+      .withIndex("by_interview_id", (q) => q.eq("interviewId", args.interviewId))
+      .collect();
+  },
+});
+
+export const addInternalComment = internalMutation({
+  args: {
+    interviewId: v.id("interviews"),
+    content: v.string(),
+    rating: v.number(),
+    interviewerId: v.string(),
+  },
+  handler: async (ctx, args) => {
+    return await ctx.db.insert("comments", {
+      interviewId: args.interviewId,
+      content: args.content,
+      rating: args.rating,
+      interviewerId: args.interviewerId,
+    });
+  },
+});
 
 // add a new comment
 export const addComment = mutation({

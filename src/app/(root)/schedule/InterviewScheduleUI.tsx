@@ -1,8 +1,8 @@
 import { useUser } from "@clerk/nextjs";
-import { useStreamVideoClient } from "@stream-io/video-react-sdk";
 import { useConvexAuth, useMutation, useQuery } from "convex/react";
 import { useEffect, useState } from "react";
 import { sendInterviewInvite } from "@/actions/invite.actions";
+import { createStreamInterviewCall } from "@/actions/stream.actions";
 import { api } from "../../../../convex/_generated/api";
 import toast from "react-hot-toast";
 import {
@@ -41,7 +41,6 @@ function setTimePart(time: string, part: "hour" | "minute", value: string) {
 }
 
 function InterviewScheduleUI() {
-  const client = useStreamVideoClient();
   const { user } = useUser();
   const { isAuthenticated, isLoading: isConvexAuthLoading } = useConvexAuth();
   const [open, setOpen] = useState(false);
@@ -77,7 +76,7 @@ function InterviewScheduleUI() {
   }, [user?.id]);
 
   const scheduleMeeting = async () => {
-    if (!client || !user) return;
+    if (!user) return;
     if (!formData.candidateId || formData.interviewerIds.length === 0) {
       toast.error("Please select both candidate and at least one interviewer");
       return;
@@ -105,16 +104,12 @@ function InterviewScheduleUI() {
       meetingDate.setHours(hours, minutes, 0, 0);
 
       const id = crypto.randomUUID();
-      const call = client.call("default", id);
 
-      await call.getOrCreate({
-        data: {
-          starts_at: meetingDate.toISOString(),
-          custom: {
-            description: title,
-            additionalDetails: description,
-          },
-        },
+      await createStreamInterviewCall({
+        callId: id,
+        title,
+        description,
+        startsAt: meetingDate.toISOString(),
       });
 
       await createInterview({

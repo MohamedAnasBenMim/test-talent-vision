@@ -1,70 +1,91 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
 body {
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: 'Plus Jakarta Sans', var(--font-geist-sans), system-ui, -apple-system, sans-serif;
 }
 
 @layer utilities {
   .text-balance {
     text-wrap: balance;
   }
+  .bg-grid-pattern {
+    background-image: radial-gradient(rgba(108, 71, 255, 0.08) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
 }
 
 @layer base {
   :root {
-    --background: 220 24% 97%;
-    --foreground: 218 28% 10%;
+    /* ── Light theme ── Super Recruiter-inspired crisp white & rich purple (#6C47FF) */
+    --background: 220 25% 97%;
+    --foreground: 224 35% 12%;
     --card: 0 0% 100%;
-    --card-foreground: 218 28% 10%;
+    --card-foreground: 224 35% 12%;
     --popover: 0 0% 100%;
-    --popover-foreground: 218 28% 10%;
-    --primary: 284 70% 48%;
+    --popover-foreground: 224 35% 12%;
+    --primary: 252 85% 62%;
     --primary-foreground: 0 0% 100%;
-    --secondary: 214 24% 92%;
-    --secondary-foreground: 218 28% 12%;
-    --muted: 217 23% 92%;
-    --muted-foreground: 218 12% 42%;
-    --accent: 188 78% 42%;
+    --secondary: 220 20% 95%;
+    --secondary-foreground: 224 30% 18%;
+    --muted: 220 20% 95%;
+    --muted-foreground: 220 14% 48%;
+    --accent: 174 78% 41%;
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 84.2% 60.2%;
+    --destructive: 0 84% 60%;
     --destructive-foreground: 0 0% 98%;
-    --border: 216 18% 84%;
-    --input: 216 18% 84%;
-    --ring: 284 70% 48%;
-    --radius: 0.5rem;
-    --chart-1: 284 70% 48%;
-    --chart-2: 188 78% 42%;
-    --chart-3: 218 28% 20%;
-    --chart-4: 44 83% 61%;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --border: 220 16% 90%;
+    --input: 220 16% 90%;
+    --ring: 252 85% 62%;
+    --radius: 0.75rem;
+    --chart-1: 252 85% 62%;
+    --chart-2: 174 78% 41%;
+    --chart-3: 220 30% 20%;
+    --chart-4: 38 92% 50%;
     --chart-5: 338 73% 55%;
+
+    /* Sidebar-specific */
+    --sidebar-bg: 0 0% 100%;
+    --sidebar-border: 220 16% 92%;
+    --sidebar-item-active-bg: 252 85% 62%;
   }
 
   .dark {
-    --background: 222 28% 6%;
-    --foreground: 220 20% 94%;
-    --card: 222 22% 9%;
-    --card-foreground: 220 20% 94%;
-    --popover: 222 24% 8%;
-    --popover-foreground: 220 20% 94%;
-    --primary: 286 75% 63%;
-    --primary-foreground: 222 28% 6%;
-    --secondary: 220 17% 16%;
-    --secondary-foreground: 220 20% 94%;
-    --muted: 219 17% 15%;
-    --muted-foreground: 218 13% 68%;
-    --accent: 187 82% 48%;
-    --accent-foreground: 222 28% 6%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 0 85.7% 97.3%;
-    --border: 220 18% 20%;
-    --input: 220 18% 20%;
-    --ring: 286 75% 63%;
-    --chart-1: 286 75% 63%;
-    --chart-2: 187 82% 48%;
+    /* ── Dark theme ── Deep navy with neon purple accents */
+    --background: 224 30% 8%;
+    --foreground: 220 20% 95%;
+    --card: 224 26% 12%;
+    --card-foreground: 220 20% 95%;
+    --popover: 224 28% 10%;
+    --popover-foreground: 220 20% 95%;
+    --primary: 252 90% 68%;
+    --primary-foreground: 224 30% 8%;
+    --secondary: 222 18% 18%;
+    --secondary-foreground: 220 20% 95%;
+    --muted: 220 18% 16%;
+    --muted-foreground: 218 14% 65%;
+    --accent: 174 82% 48%;
+    --accent-foreground: 224 30% 8%;
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+    --success: 142 71% 45%;
+    --success-foreground: 0 0% 100%;
+    --warning: 38 92% 50%;
+    --warning-foreground: 0 0% 100%;
+    --border: 222 18% 20%;
+    --input: 222 18% 20%;
+    --ring: 252 90% 68%;
+    --chart-1: 252 90% 68%;
+    --chart-2: 174 82% 48%;
     --chart-3: 215 17% 76%;
-    --chart-4: 44 83% 61%;
+    --chart-4: 38 92% 50%;
     --chart-5: 338 73% 62%;
   }
 }
@@ -75,13 +96,39 @@ body {
   }
   body {
     @apply bg-background text-foreground antialiased;
-    background-image:
-      linear-gradient(135deg, hsl(var(--background)) 0%, hsl(var(--secondary) / 0.52) 52%, hsl(var(--background)) 100%),
-      linear-gradient(90deg, hsl(var(--primary) / 0.08), hsl(var(--accent) / 0.07));
     min-height: 100vh;
   }
 
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 5px;
+    height: 5px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    @apply rounded-full bg-border;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/40;
+  }
+
   ::selection {
-    @apply bg-primary/30 text-foreground;
+    @apply bg-primary/20 text-foreground;
   }
 }
+
+/* ── Sidebar layout utilities ── */
+@layer utilities {
+  .sidebar-nav-item {
+    @apply flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium
+           text-muted-foreground transition-all duration-150
+           hover:bg-secondary hover:text-foreground;
+  }
+
+  .sidebar-nav-item-active {
+    @apply bg-primary text-primary-foreground font-semibold shadow-sm shadow-primary/25;
+  }
+}
+

@@ -1,28 +1,21 @@
 import { useRouter } from "next/navigation";
-import { useStreamVideoClient } from "@stream-io/video-react-sdk";
 import toast from "react-hot-toast";
+import { createStreamInterviewCall } from "@/actions/stream.actions";
 
 const useMeetingActions = () => {
   const router = useRouter();
-  const client = useStreamVideoClient();
 
   const createInstantMeeting = async () => {
-    if (!client) return;
-
     try {
       const id = crypto.randomUUID();
-      const call = client.call("default", id);
 
-      await call.getOrCreate({
-        data: {
-          starts_at: new Date().toISOString(),
-          custom: {
-            description: "Instant Meeting",
-          },
-        },
+      await createStreamInterviewCall({
+        callId: id,
+        title: "Instant Meeting",
+        startsAt: new Date().toISOString(),
       });
 
-      router.push(`/meeting/${call.id}`);
+      router.push(`/meeting/${id}`);
       toast.success("Meeting Created");
     } catch (error) {
       console.error(error);
@@ -31,7 +24,6 @@ const useMeetingActions = () => {
   };
 
   const joinMeeting = (callId: string) => {
-    if (!client) return toast.error("Failed to join meeting. Please try again.");
     router.push(`/meeting/${callId}`);
   };
 

@@ -1,5 +1,12 @@
-import { mutation, query } from "./_generated/server";
+import { mutation, query, internalQuery } from "./_generated/server";
 import { v } from "convex/values";
+
+export const getInterviewInternal = internalQuery({
+  args: { id: v.id("interviews") },
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.id);
+  },
+});
 
 export const getAllInterviews = query({
   handler: async (ctx) => {

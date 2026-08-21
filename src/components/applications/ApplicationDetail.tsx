@@ -6,6 +6,7 @@ import { api } from "../../../convex/_generated/api";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
 import { sendApplicationRejectionEmail } from "@/actions/application.actions";
 import { sendInterviewInvite } from "@/actions/invite.actions";
+import { createStreamInterviewCall } from "@/actions/stream.actions";
 import LoaderUI from "@/components/LoaderUI";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -37,7 +38,6 @@ import {
   getApplicationStatusVariant,
 } from "@/components/applications/status";
 import { useUser } from "@clerk/nextjs";
-import { useStreamVideoClient } from "@stream-io/video-react-sdk";
 import { format } from "date-fns";
 import {
   ArrowLeftIcon,
@@ -139,7 +139,6 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
   const rerunApplicationAnalysis = useAction(api.applicationAnalysis.rerunApplicationAnalysis);
   const updateApplicationStatus = useMutation(api.applications.updateApplicationStatus);
   const createInterview = useMutation(api.interviews.createInterview);
-  const client = useStreamVideoClient();
   const { user } = useUser();
   const [isRejecting, setIsRejecting] = useState(false);
   const [isRerunningAnalysis, setIsRerunningAnalysis] = useState(false);
@@ -209,7 +208,7 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
 
   const handleScheduleInterview = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!application || !client || !user) return;
+    if (!application || !user) return;
 
     setIsScheduling(true);
 
@@ -225,16 +224,12 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
       meetingDate.setHours(hours, minutes, 0, 0);
 
       const streamCallId = crypto.randomUUID();
-      const call = client.call("default", streamCallId);
 
-      await call.getOrCreate({
-        data: {
-          starts_at: meetingDate.toISOString(),
-          custom: {
-            description: scheduleForm.title,
-            additionalDetails: scheduleForm.description,
-          },
-        },
+      await createStreamInterviewCall({
+        callId: streamCallId,
+        title: scheduleForm.title,
+        description: scheduleForm.description,
+        startsAt: meetingDate.toISOString(),
       });
 
       await createInterview({

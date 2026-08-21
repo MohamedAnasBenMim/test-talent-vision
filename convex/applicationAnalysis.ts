@@ -193,14 +193,7 @@ async function runAiAnalysis(
 async function assertInterviewerForAnalysis(ctx: any) {
   const identity = await ctx.auth.getUserIdentity();
   if (!identity) throw new Error("Unauthorized");
-
-  const user = await ctx.runQuery(internal.applications.getUserByClerkIdInternal, {
-    clerkId: identity.subject,
-  });
-
-  if (user?.role !== "interviewer") {
-    throw new Error("Only interviewers can run AI analysis");
-  }
+  // Previously required interviewer role; now any authenticated user can run analysis.
 }
 
 async function requestGeminiAnalysis({

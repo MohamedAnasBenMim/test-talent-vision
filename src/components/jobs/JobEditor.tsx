@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "convex/react";
+import { useMutation, useQuery, useAction } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -18,7 +18,7 @@ import {
 import { Textarea } from "@/components/ui/textarea";
 import LoaderUI from "@/components/LoaderUI";
 import { joinList, normalizeOptional, slugifyJobId, splitList } from "@/components/jobs/jobUtils";
-import { CheckCircle2Icon, CopyIcon, ExternalLinkIcon, Loader2Icon, SaveIcon } from "lucide-react";
+import { SparklesIcon, CheckCircle2Icon, CopyIcon, ExternalLinkIcon, Loader2Icon, SaveIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -36,7 +36,9 @@ export default function JobEditor({ jobId }: JobEditorProps) {
     jobId ? { jobId } : "skip"
   );
   const upsertJobRequirements = useMutation(api.applications.upsertJobRequirements);
+  const generateAction = useAction((api as any).jobGeneration?.generateJobDescription);
   const [isSaving, setIsSaving] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [form, setForm] = useState({
     jobId: jobId ?? "",
     title: "",
@@ -91,6 +93,34 @@ export default function JobEditor({ jobId }: JobEditorProps) {
 
     await navigator.clipboard.writeText(publicUrl);
     toast.success("Public job link copied");
+  };
+
+  const handleGenerateAI = async () => {
+    if (!form.title) {
+      toast.error("Please enter a Job title first");
+      return;
+    }
+    
+    setIsGenerating(true);
+    try {
+      const result = await generateAction({ title: form.title });
+      
+      setForm(prev => ({
+        ...prev,
+        description: result.description || prev.description,
+        requiredSkills: result.requiredSkills || prev.requiredSkills,
+        niceToHaveSkills: result.niceToHaveSkills || prev.niceToHaveSkills,
+        minimumExperience: result.minimumExperience || prev.minimumExperience,
+        languages: result.languages || prev.languages,
+        education: result.education || prev.education,
+      }));
+      toast.success("Job details generated with AI!");
+    } catch (error: any) {
+      console.error(error);
+      toast.error(`Failed to generate with AI: ${error?.message || error}`);
+    } finally {
+      setIsGenerating(false);
+    }
   };
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
@@ -155,7 +185,24 @@ export default function JobEditor({ jobId }: JobEditorProps) {
         <form className="space-y-5" onSubmit={handleSubmit}>
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-2">
-              <Label htmlFor="title">Job title</Label>
+              <div className="flex items-center justify-between">
+                <Label htmlFor="title">Job title</Label>
+                <Button 
+                  type="button" 
+                  variant="outline" 
+                  size="sm" 
+                  className="h-7 text-xs" 
+                  onClick={handleGenerateAI}
+                  disabled={isGenerating || !form.title}
+                >
+                  {isGenerating ? (
+                    <Loader2Icon className="mr-1 size-3 animate-spin" />
+                  ) : (
+                    <SparklesIcon className="mr-1 size-3 text-purple-500" />
+                  )}
+                  Generate with AI
+                </Button>
+              </div>
               <Input
                 id="title"
                 value={form.title}

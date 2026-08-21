@@ -5,7 +5,8 @@ import { api } from "../../../convex/_generated/api";
 import LoaderUI from "@/components/LoaderUI";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
 import {
   APPLICATION_STATUS_LABELS,
   AI_RECOMMENDATION_LABELS,
@@ -16,123 +17,211 @@ import {
 } from "@/components/applications/status";
 import { format } from "date-fns";
 import {
-  BriefcaseBusinessIcon,
-  CalendarIcon,
-  ExternalLinkIcon,
+  BriefcaseIcon,
+  ChevronRightIcon,
   FileTextIcon,
   MailIcon,
   PhoneIcon,
+  SearchIcon,
+  SparklesIcon,
   UserIcon,
 } from "lucide-react";
 import Link from "next/link";
+import { useState, useMemo } from "react";
 
 export default function ApplicationsDashboard() {
   const applications = useQuery(api.applications.getApplications);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [activeFilter, setActiveFilter] = useState<"all" | "high" | "review" | "passed">("all");
+
+  const filteredApplications = useMemo(() => {
+    if (!applications) return [];
+
+    return applications.filter((app) => {
+      // Search term filter
+      const matchesSearch =
+        !searchTerm.trim() ||
+        app.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        app.email.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        app.position.toLowerCase().includes(searchTerm.toLowerCase());
+
+      if (!matchesSearch) return false;
+
+      // Status tab filter
+      if (activeFilter === "high") return (app.aiScore ?? 0) >= 80;
+      if (activeFilter === "review") return app.status === "cv_review_required";
+      if (activeFilter === "passed") return app.status === "technical_passed";
+
+      return true;
+    });
+  }, [applications, searchTerm, activeFilter]);
 
   if (applications === undefined) return <LoaderUI />;
 
   return (
-    <div className="container mx-auto max-w-7xl px-4 py-8 sm:px-6">
-      <div className="mb-8 flex flex-col gap-4 rounded-lg border border-border/70 bg-card/80 p-6 shadow-sm shadow-black/20 sm:flex-row sm:items-center sm:justify-between">
+    <div className="container mx-auto max-w-7xl p-6 space-y-6">
+      {/* Page Header */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">
-            Candidate Pipeline
-          </p>
-          <h1 className="mt-2 text-3xl font-bold tracking-tight">Applications</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
+            Candidates
+          </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Review submitted CVs, shortlist candidates, and start technical interviews.
+            Review inbound CV submissions, AI screening scores, and schedule candidate technical interviews.
           </p>
         </div>
         <Button asChild variant="outline">
-          <Link href="/dashboard">Interview Dashboard</Link>
+          <Link href="/dashboard">
+            Interview Dashboard
+          </Link>
         </Button>
       </div>
 
-      {applications.length === 0 ? (
-        <section className="rounded-lg border border-border/70 bg-card/80 p-10 text-center shadow-sm shadow-black/20">
-          <FileTextIcon className="mx-auto size-10 text-muted-foreground" />
-          <h2 className="mt-4 text-xl font-semibold">No Applications Yet</h2>
-          <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-            Candidate submissions from the public apply page will appear here.
-          </p>
-        </section>
-      ) : (
-        <div className="space-y-3">
-          {applications.map((application) => {
-            const status = application.status as ApplicationStatus;
-            const recommendation = application.aiRecommendation as AiRecommendation | undefined;
-
-            return (
-              <Card
-                key={application._id}
-                className="overflow-hidden transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10"
-              >
-                <CardContent className="grid gap-4 p-4 lg:grid-cols-[1.2fr_1fr_0.8fr_0.8fr_auto] lg:items-center">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h2 className="truncate text-lg font-semibold">{application.fullName}</h2>
-                      <Badge variant={getApplicationStatusVariant(status)}>
-                        {APPLICATION_STATUS_LABELS[status]}
-                      </Badge>
-                    </div>
-                    <div className="mt-2 grid gap-2 text-sm text-muted-foreground sm:grid-cols-2">
-                      <span className="flex min-w-0 items-center gap-2">
-                        <MailIcon className="size-4 shrink-0 text-primary" />
-                        <span className="truncate">{application.email}</span>
-                      </span>
-                      <span className="flex min-w-0 items-center gap-2">
-                        <PhoneIcon className="size-4 shrink-0 text-primary" />
-                        <span className="truncate">{application.phone}</span>
-                      </span>
-                    </div>
-                  </div>
-
-                  <div className="grid gap-2 text-sm text-muted-foreground">
-                    <span className="flex min-w-0 items-center gap-2">
-                      <BriefcaseBusinessIcon className="size-4 shrink-0 text-accent" />
-                      <span className="truncate">{application.position}</span>
-                    </span>
-                    <span className="flex min-w-0 items-center gap-2">
-                      <FileTextIcon className="size-4 shrink-0 text-accent" />
-                      <span className="truncate">{application.cvFileName}</span>
-                    </span>
-                  </div>
-
-                  <div className="rounded-lg border border-border/70 bg-background/45 p-3">
-                    <p className="text-xs text-muted-foreground">AI Score</p>
-                    <div className="mt-1 flex items-center gap-2">
-                      <span className="text-2xl font-bold text-foreground">
-                        {application.aiScore ?? "--"}
-                      </span>
-                      {typeof application.aiScore === "number" && (
-                        <span className="text-xs text-muted-foreground">/ 100</span>
-                      )}
-                    </div>
-                    {recommendation && (
-                      <Badge className="mt-2" variant={getAiRecommendationVariant(recommendation)}>
-                        {AI_RECOMMENDATION_LABELS[recommendation]}
-                      </Badge>
-                    )}
-                  </div>
-
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <CalendarIcon className="size-4 text-primary" />
-                    {format(new Date(application.createdAt), "MMM d, yyyy · h:mm a")}
-                  </div>
-
-                  <Button asChild>
-                    <Link href={`/dashboard/applications/${application._id}`}>
-                      <UserIcon className="size-4" />
-                      Review
-                      <ExternalLinkIcon className="size-4" />
-                    </Link>
-                  </Button>
-                </CardContent>
-              </Card>
-            );
-          })}
+      {/* Search & Filter Controls */}
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative flex-1 max-w-md">
+          <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
+          <Input
+            placeholder="Search candidates by name, email, or role..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="pl-9 bg-card"
+          />
         </div>
-      )}
+        <div className="flex items-center gap-2">
+          <Button
+            size="sm"
+            variant={activeFilter === "all" ? "default" : "ghost"}
+            onClick={() => setActiveFilter("all")}
+          >
+            All ({applications.length})
+          </Button>
+          <Button
+            size="sm"
+            variant={activeFilter === "high" ? "default" : "ghost"}
+            onClick={() => setActiveFilter("high")}
+          >
+            High Match (&gt;80%)
+          </Button>
+          <Button
+            size="sm"
+            variant={activeFilter === "review" ? "default" : "ghost"}
+            onClick={() => setActiveFilter("review")}
+          >
+            In Review
+          </Button>
+          <Button
+            size="sm"
+            variant={activeFilter === "passed" ? "default" : "ghost"}
+            onClick={() => setActiveFilter("passed")}
+          >
+            Passed
+          </Button>
+        </div>
+      </div>
+
+      {/* Candidates Table Card */}
+      <Card>
+        <CardContent className="p-0">
+          {filteredApplications.length === 0 ? (
+            <div className="p-12 text-center text-muted-foreground space-y-3">
+              <FileTextIcon className="mx-auto size-10 opacity-50" />
+              <p className="font-medium text-base">No candidate records match your criteria.</p>
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-sm">
+                <thead className="bg-secondary/40 text-xs uppercase text-muted-foreground font-semibold border-b border-border">
+                  <tr>
+                    <th className="px-6 py-3.5">Candidate</th>
+                    <th className="px-6 py-3.5">Position</th>
+                    <th className="px-6 py-3.5">AI Score</th>
+                    <th className="px-6 py-3.5">Recommendation</th>
+                    <th className="px-6 py-3.5">Status</th>
+                    <th className="px-6 py-3.5">Applied Date</th>
+                    <th className="px-6 py-3.5 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {filteredApplications.map((app) => {
+                    const status = app.status as ApplicationStatus;
+                    const recommendation = app.aiRecommendation as AiRecommendation | undefined;
+
+                    return (
+                      <tr key={app._id} className="hover:bg-secondary/20 transition-colors">
+                        {/* Candidate Info */}
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-3">
+                            <div className="grid size-9 place-items-center rounded-full bg-primary/10 text-primary font-bold text-xs shrink-0">
+                              {app.fullName.substring(0, 2).toUpperCase()}
+                            </div>
+                            <div className="min-w-0">
+                              <p className="font-bold text-foreground truncate">{app.fullName}</p>
+                              <p className="text-xs text-muted-foreground truncate">{app.email}</p>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Position */}
+                        <td className="px-6 py-4 font-semibold text-foreground">
+                          <span className="inline-flex items-center gap-1.5 rounded-lg bg-secondary px-2.5 py-1 text-xs font-medium">
+                            <BriefcaseIcon className="size-3 text-primary" />
+                            {app.position}
+                          </span>
+                        </td>
+
+                        {/* AI Score */}
+                        <td className="px-6 py-4">
+                          {typeof app.aiScore === "number" ? (
+                            <div className="flex items-center gap-2">
+                              <span className="font-extrabold text-base">{app.aiScore}</span>
+                              <span className="text-xs text-muted-foreground">/100</span>
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground italic">Analyzing...</span>
+                          )}
+                        </td>
+
+                        {/* Recommendation */}
+                        <td className="px-6 py-4">
+                          {recommendation ? (
+                            <Badge variant={getAiRecommendationVariant(recommendation)}>
+                              {AI_RECOMMENDATION_LABELS[recommendation]}
+                            </Badge>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">Pending</span>
+                          )}
+                        </td>
+
+                        {/* Status */}
+                        <td className="px-6 py-4">
+                          <Badge variant={getApplicationStatusVariant(status)}>
+                            {APPLICATION_STATUS_LABELS[status]}
+                          </Badge>
+                        </td>
+
+                        {/* Applied Date */}
+                        <td className="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
+                          {format(new Date(app.createdAt), "MMM d, yyyy")}
+                        </td>
+
+                        {/* Action */}
+                        <td className="px-6 py-4 text-right">
+                          <Button asChild size="sm">
+                            <Link href={`/dashboard/applications/${app._id}`}>
+                              Review <ChevronRightIcon className="size-3.5" />
+                            </Link>
+                          </Button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
