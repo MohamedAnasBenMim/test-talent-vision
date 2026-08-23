@@ -199,7 +199,7 @@ function InterviewScheduleUI() {
   }
 
   return (
-    <div className="container mx-auto max-w-7xl space-y-8 p-4 sm:p-6">
+    <div className="w-full p-4 sm:p-6 lg:p-8 space-y-5">
       <div className="flex flex-col gap-4 rounded-lg border border-border/70 bg-card/80 p-6 shadow-sm shadow-black/20 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">

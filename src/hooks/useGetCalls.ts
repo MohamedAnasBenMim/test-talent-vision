@@ -48,7 +48,7 @@ const useGetCalls = () => {
     return startsAt && new Date(startsAt) < now && !endedAt;
   });
 
-  return { calls, endedCalls, upcomingCalls, liveCalls, isLoading };
+  return { calls, setCalls, endedCalls, upcomingCalls, liveCalls, isLoading };
 };
 
 export default useGetCalls;

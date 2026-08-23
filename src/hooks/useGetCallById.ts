@@ -8,22 +8,34 @@ const useGetCallById = (id: string | string[]) => {
   const client = useStreamVideoClient();
 
   useEffect(() => {
-    if (!client) return;
+    if (!client || !id) {
+      return;
+    }
+
+    const callId = Array.isArray(id) ? id[0] : id;
+    let isMounted = true;
 
     const getCall = async () => {
       try {
-        const { calls } = await client.queryCalls({ filter_conditions: { id } });
+        const callInstance = client.call("default", callId);
+        await callInstance.getOrCreate();
 
-        if (calls.length > 0) setCall(calls[0]);
+        if (isMounted) {
+          setCall(callInstance);
+        }
       } catch (error) {
-        console.error(error);
-        setCall(undefined);
+        console.error("Error fetching Stream call:", error);
+        if (isMounted) setCall(undefined);
       } finally {
-        setIsCallLoading(false);
+        if (isMounted) setIsCallLoading(false);
       }
     };
 
     getCall();
+
+    return () => {
+      isMounted = false;
+    };
   }, [client, id]);
 
   return { call, isCallLoading };

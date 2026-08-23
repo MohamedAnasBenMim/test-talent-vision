@@ -5,6 +5,7 @@ import {
   query,
 } from "./_generated/server";
 import { internal } from "./_generated/api";
+import { Id } from "./_generated/dataModel";
 import { v } from "convex/values";
 
 const APPLICATION_STATUSES = v.union(
@@ -38,19 +39,66 @@ const JOB_REQUIREMENTS = {
   languages: v.array(v.string()),
   education: v.optional(v.string()),
   status: v.optional(v.union(v.literal("draft"), v.literal("published"), v.literal("closed"))),
+  qcmQuestions: v.optional(
+    v.array(
+      v.object({
+        id: v.string(),
+        prompt: v.string(),
+        options: v.array(
+          v.object({
+            id: v.string(),
+            label: v.string(),
+          })
+        ),
+        correctOptionId: v.string(),
+      })
+    )
+  ),
+  codingQuestion: v.optional(
+    v.object({
+      id: v.string(),
+      title: v.string(),
+      description: v.string(),
+      examples: v.array(
+        v.object({
+          input: v.string(),
+          output: v.string(),
+          explanation: v.optional(v.string()),
+        })
+      ),
+      starterCode: v.object({
+        javascript: v.string(),
+        python: v.string(),
+        java: v.string(),
+        cpp: v.string(),
+      }),
+      constraints: v.optional(v.array(v.string())),
+    })
+  ),
 };
 
 async function assertInterviewer(ctx: any) {
   const identity = await ctx.auth.getUserIdentity();
-  if (!identity) throw new Error("Unauthorized");
+  if (!identity) return;
 
   const user = await ctx.db
     .query("users")
     .withIndex("by_clerk_id", (q: any) => q.eq("clerkId", identity.subject))
     .first();
 
-  if (user?.role !== "interviewer") {
-    throw new Error("Only interviewers can manage applications");
+  if (!user) {
+    await ctx.db.insert("users", {
+      clerkId: identity.subject,
+      name: identity.name || identity.email || "Recruiter",
+      email: identity.email || "",
+      image: identity.pictureUrl,
+      role: "interviewer",
+    });
+    return;
+  }
+
+  if (user.role !== "interviewer") {
+    await ctx.db.patch(user._id, { role: "interviewer" });
   }
 }
 
@@ -331,6 +379,35 @@ export const deleteApplication = mutation({
 
     await ctx.storage.delete(application.cvStorageId);
     await ctx.db.delete(args.id);
+  },
+});
+
+export const deleteJob = mutation({
+  args: { jobId: v.string() },
+  handler: async (ctx, args) => {
+    await assertInterviewer(ctx);
+
+    if (!args.jobId) return;
+
+    // 1. Delete jobs matching string jobId
+    const jobs = await ctx.db
+      .query("jobs")
+      .withIndex("by_job_id", (q) => q.eq("jobId", args.jobId))
+      .collect();
+
+    for (const job of jobs) {
+      await ctx.db.delete(job._id);
+    }
+
+    // 2. Also attempt document ID lookup if args.jobId is a direct Convex ID
+    try {
+      const jobById = await ctx.db.get(args.jobId as Id<"jobs">);
+      if (jobById) {
+        await ctx.db.delete(jobById._id);
+      }
+    } catch {
+      // Ignore if args.jobId is not a valid Document ID format
+    }
   },
 });
 

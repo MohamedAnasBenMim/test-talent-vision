@@ -3,10 +3,14 @@ import { Doc } from "../../convex/_generated/dataModel";
 import { getMeetingStatus } from "@/lib/utils";
 import { format } from "date-fns";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "./ui/card";
-import { CalendarIcon, ClockIcon, VideoIcon } from "lucide-react";
+import { CalendarIcon, ClockIcon, Trash2Icon, VideoIcon } from "lucide-react";
 import { Badge } from "./ui/badge";
 import { Button } from "./ui/button";
 import { useEffect, useState } from "react";
+import { useMutation } from "convex/react";
+import { api } from "../../convex/_generated/api";
+import { deleteStreamCall } from "@/actions/recording.actions";
+import toast from "react-hot-toast";
 
 type Interview = Doc<"interviews">;
 
@@ -24,7 +28,9 @@ function formatStartsIn(startTime: number, now: number) {
 
 function MeetingCard({ interview }: { interview: Interview }) {
   const { joinMeeting } = useMeetingActions();
+  const deleteInterview = useMutation(api.interviews.deleteInterview);
   const [now, setNow] = useState(Date.now());
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const status = getMeetingStatus(interview, new Date(now));
   const formattedDate = format(new Date(interview.startTime), "EEEE, MMMM d · h:mm a");
@@ -34,6 +40,22 @@ function MeetingCard({ interview }: { interview: Interview }) {
     const interval = window.setInterval(() => setNow(Date.now()), 1000);
     return () => window.clearInterval(interval);
   }, []);
+
+  const handleDelete = async () => {
+    try {
+      setIsDeleting(true);
+      if (interview.streamCallId) {
+        await deleteStreamCall({ callId: interview.streamCallId });
+      }
+      await deleteInterview({ id: interview._id });
+      toast.success("Interview deleted");
+    } catch (error) {
+      console.error(error);
+      toast.error("Failed to delete interview");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
 
   return (
     <Card className="overflow-hidden transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lg hover:shadow-primary/10">
@@ -45,13 +67,26 @@ function MeetingCard({ interview }: { interview: Interview }) {
             {formattedDate}
           </div>
 
-          <Badge
-            variant={
-              status === "live" ? "default" : status === "upcoming" ? "secondary" : "outline"
-            }
-          >
-            {status === "live" ? "Live Now" : status === "upcoming" ? "Upcoming" : "Completed"}
-          </Badge>
+          <div className="flex items-center gap-2">
+            <Badge
+              variant={
+                status === "live" ? "default" : status === "upcoming" ? "secondary" : "outline"
+              }
+            >
+              {status === "live" ? "Live Now" : status === "upcoming" ? "Upcoming" : "Completed"}
+            </Badge>
+
+            <Button
+              variant="ghost"
+              size="icon"
+              className="h-7 w-7 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+              title="Delete Interview"
+              disabled={isDeleting}
+              onClick={handleDelete}
+            >
+              <Trash2Icon className="size-3.5" />
+            </Button>
+          </div>
         </div>
 
         <CardTitle className="text-lg tracking-tight">{interview.title}</CardTitle>

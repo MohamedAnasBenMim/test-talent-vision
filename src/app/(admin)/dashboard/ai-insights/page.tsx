@@ -43,7 +43,7 @@ export default function AiInsightsPage() {
   if (applications === undefined || jobs === undefined) return <LoaderUI />;
 
   return (
-    <div className="container mx-auto max-w-7xl p-6 space-y-8">
+    <div className="w-full p-4 sm:p-6 lg:p-8 space-y-5">
       {/* Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

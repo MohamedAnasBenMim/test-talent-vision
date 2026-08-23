@@ -76,6 +76,42 @@ export default defineSchema({
     languages: v.array(v.string()),
     education: v.optional(v.string()),
     status: v.optional(v.union(v.literal("draft"), v.literal("published"), v.literal("closed"))),
+    qcmQuestions: v.optional(
+      v.array(
+        v.object({
+          id: v.string(),
+          prompt: v.string(),
+          options: v.array(
+            v.object({
+              id: v.string(),
+              label: v.string(),
+            })
+          ),
+          correctOptionId: v.string(),
+        })
+      )
+    ),
+    codingQuestion: v.optional(
+      v.object({
+        id: v.string(),
+        title: v.string(),
+        description: v.string(),
+        examples: v.array(
+          v.object({
+            input: v.string(),
+            output: v.string(),
+            explanation: v.optional(v.string()),
+          })
+        ),
+        starterCode: v.object({
+          javascript: v.string(),
+          python: v.string(),
+          java: v.string(),
+          cpp: v.string(),
+        }),
+        constraints: v.optional(v.array(v.string())),
+      })
+    ),
     createdAt: v.number(),
     updatedAt: v.number(),
   })

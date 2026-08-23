@@ -7,6 +7,7 @@ import { Id } from "../../../convex/_generated/dataModel";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Card } from "@/components/ui/card";
 import { sendApplicationConfirmationEmail } from "@/actions/application.actions";
 import { autoSendTechnicalInterviewInvite } from "@/actions/auto-invite.actions";
 import { cn } from "@/lib/utils";
@@ -205,193 +206,242 @@ export default function ApplicationForm({
 
   if (submittedId) {
     return (
-      <section className="mx-auto max-w-2xl rounded-lg border border-border/70 bg-card/85 p-8 text-center shadow-sm shadow-black/20">
-        <div className="mx-auto grid size-14 place-items-center rounded-md border border-accent/30 bg-accent/10">
-          <CheckCircle2Icon className="size-7 text-accent" />
+      <section className="rounded-2xl border border-emerald-500/30 bg-card p-8 sm:p-10 text-center shadow-xl shadow-emerald-500/5 space-y-4">
+        <div className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-emerald-500/10 text-emerald-500 border border-emerald-500/30">
+          <CheckCircle2Icon className="size-8" />
         </div>
-        <h1 className="mt-5 text-2xl font-bold tracking-tight">Application Submitted</h1>
-        <p className="mx-auto mt-3 max-w-md text-sm leading-6 text-muted-foreground">
-          Thank you for applying to BECARTH.AI Consulting. The recruiting team will review your CV
-          and contact you by email about the next step.
+        <h2 className="text-2xl font-bold tracking-tight text-foreground">Application Submitted Successfully!</h2>
+        <p className="mx-auto max-w-md text-sm leading-relaxed text-muted-foreground">
+          Thank you for applying to <span className="font-semibold text-foreground">BECARTH.AI</span>. Your CV has been securely registered in our system. You will receive an email confirmation shortly with details about your technical assessment.
         </p>
       </section>
     );
   }
 
   return (
-    <form
-      onSubmit={handleSubmit}
-      className="mx-auto grid max-w-5xl gap-6 lg:grid-cols-[0.9fr_1.1fr]"
-    >
-      <section className="rounded-lg border border-border/70 bg-card/85 p-6 shadow-sm shadow-black/20">
-        <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">
-          BECARTH.AI Careers
-        </p>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight">Candidate Application</h1>
-        <p className="mt-3 text-sm leading-6 text-muted-foreground">
-          Send your profile for review by the BECARTHAI TalentVision team.
-        </p>
+    <Card className="overflow-hidden border border-border/80 bg-card/95 shadow-xl shadow-black/5">
+      <div className="h-1 bg-gradient-to-r from-primary via-accent to-purple-600" />
+      <div className="p-6 sm:p-8 space-y-6">
+        <div>
+          <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-widest text-primary">
+            <UserIcon className="size-3.5" />
+            Candidate Registration
+          </div>
+          <h2 className="mt-2 text-2xl font-extrabold tracking-tight text-foreground">
+            Apply for this Position
+          </h2>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Fill out your personal details and upload your CV to start your evaluation.
+          </p>
+        </div>
 
-        <div className="mt-8 space-y-4">
-          <div className="rounded-lg border border-border/70 bg-background/50 p-4">
-            <div className="flex items-center gap-3">
-              <BriefcaseBusinessIcon className="size-5 text-primary" />
-              <div>
-                <p className="text-sm font-semibold">Application Status</p>
-                <p className="text-sm text-muted-foreground">Submitted CV review</p>
+        <form onSubmit={handleSubmit} className="space-y-5">
+          {/* Personal Info Group */}
+          <div className="space-y-4">
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="fullName" className="text-xs font-semibold text-foreground">
+                  Full Name <span className="text-destructive">*</span>
+                </Label>
+                <div className="relative">
+                  <UserIcon className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="fullName"
+                    required
+                    placeholder="e.g. Alex Morgan"
+                    autoComplete="name"
+                    className="h-11 pl-10 bg-background/60 text-sm focus-visible:ring-primary"
+                    value={form.fullName}
+                    onChange={(event) => updateField("fullName", event.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="email" className="text-xs font-semibold text-foreground">
+                  Email Address <span className="text-destructive">*</span>
+                </Label>
+                <div className="relative">
+                  <MailIcon className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="email"
+                    type="email"
+                    required
+                    placeholder="alex@example.com"
+                    autoComplete="email"
+                    className="h-11 pl-10 bg-background/60 text-sm focus-visible:ring-primary"
+                    value={form.email}
+                    onChange={(event) => updateField("email", event.target.value)}
+                  />
+                </div>
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="phone" className="text-xs font-semibold text-foreground">
+                  Phone Number <span className="text-destructive">*</span>
+                </Label>
+                <div className="relative">
+                  <PhoneIcon className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="phone"
+                    required
+                    placeholder="+216 20 000 000"
+                    autoComplete="tel"
+                    className="h-11 pl-10 bg-background/60 text-sm focus-visible:ring-primary"
+                    value={form.phone}
+                    onChange={(event) => updateField("phone", event.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="position" className="text-xs font-semibold text-foreground">
+                  Target Position <span className="text-destructive">*</span>
+                </Label>
+                <div className="relative">
+                  <BriefcaseBusinessIcon className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="position"
+                    required
+                    className="h-11 pl-10 bg-background/60 text-sm focus-visible:ring-primary font-medium"
+                    readOnly={lockPosition}
+                    value={form.position}
+                    onChange={(event) => updateField("position", event.target.value)}
+                  />
+                </div>
               </div>
             </div>
           </div>
-          <div className="rounded-lg border border-border/70 bg-background/50 p-4">
-            <div className="flex items-center gap-3">
-              <FileUpIcon className="size-5 text-accent" />
-              <div>
-                <p className="text-sm font-semibold">CV File</p>
-                <p className="text-sm text-muted-foreground">{selectedFileLabel}</p>
+
+          {/* Social / Portfolio Links */}
+          <div className="pt-2 space-y-3 border-t border-border/50">
+            <p className="text-xs font-bold uppercase tracking-wider text-muted-foreground">
+              Professional Profiles (Optional)
+            </p>
+            <div className="grid gap-3 sm:grid-cols-3">
+              <div className="space-y-1">
+                <Label htmlFor="portfolioUrl" className="text-[11px] font-medium text-muted-foreground">
+                  Portfolio
+                </Label>
+                <div className="relative">
+                  <LinkIcon className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="portfolioUrl"
+                    type="url"
+                    className="h-9 pl-9 text-xs bg-background/50"
+                    placeholder="https://yourportfolio.com"
+                    value={form.portfolioUrl}
+                    onChange={(event) => updateField("portfolioUrl", event.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="githubUrl" className="text-[11px] font-medium text-muted-foreground">
+                  GitHub
+                </Label>
+                <div className="relative">
+                  <GithubIcon className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="githubUrl"
+                    type="url"
+                    className="h-9 pl-9 text-xs bg-background/50"
+                    placeholder="https://github.com/username"
+                    value={form.githubUrl}
+                    onChange={(event) => updateField("githubUrl", event.target.value)}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <Label htmlFor="linkedinUrl" className="text-[11px] font-medium text-muted-foreground">
+                  LinkedIn
+                </Label>
+                <div className="relative">
+                  <LinkedinIcon className="pointer-events-none absolute left-3 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+                  <Input
+                    id="linkedinUrl"
+                    type="url"
+                    className="h-9 pl-9 text-xs bg-background/50"
+                    placeholder="https://linkedin.com/in/user"
+                    value={form.linkedinUrl}
+                    onChange={(event) => updateField("linkedinUrl", event.target.value)}
+                  />
+                </div>
               </div>
             </div>
           </div>
-        </div>
-      </section>
 
-      <section className="rounded-lg border border-border/70 bg-card/85 p-6 shadow-sm shadow-black/20">
-        <div className="grid gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
-            <Label htmlFor="fullName">Full name</Label>
-            <div className="relative">
-              <UserIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          {/* Custom File Upload Box */}
+          <div className="pt-2 space-y-2 border-t border-border/50">
+            <Label className="text-xs font-semibold text-foreground flex items-center justify-between">
+              <span>Upload Resume / CV <span className="text-destructive">*</span></span>
+              <span className="text-[11px] font-normal text-muted-foreground">PDF, DOC, DOCX up to 10MB</span>
+            </Label>
+            
+            <label
+              htmlFor="cv"
+              className={cn(
+                "group relative flex flex-col items-center justify-center rounded-xl border-2 border-dashed p-6 text-center transition-all cursor-pointer",
+                cvFile
+                  ? "border-emerald-500/60 bg-emerald-500/5 dark:bg-emerald-500/10"
+                  : "border-border hover:border-primary/60 hover:bg-primary/5"
+              )}
+            >
               <Input
-                id="fullName"
-                required
-                autoComplete="name"
-                className="pl-9"
-                value={form.fullName}
-                onChange={(event) => updateField("fullName", event.target.value)}
+                id="cv"
+                type="file"
+                required={!cvFile}
+                className="sr-only"
+                accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                onChange={(event) => handleFileChange(event.target.files?.[0])}
               />
-            </div>
+              {cvFile ? (
+                <div className="flex items-center gap-3 text-emerald-600 dark:text-emerald-400">
+                  <div className="flex size-10 items-center justify-center rounded-lg bg-emerald-500/20">
+                    <CheckCircle2Icon className="size-5" />
+                  </div>
+                  <div className="text-left">
+                    <p className="text-xs font-bold truncate max-w-xs">{cvFile.name}</p>
+                    <p className="text-[11px] text-muted-foreground">{formatFileSize(cvFile.size)} · Click to change file</p>
+                  </div>
+                </div>
+              ) : (
+                <div className="flex flex-col items-center space-y-2">
+                  <div className="flex size-12 items-center justify-center rounded-full bg-primary/10 text-primary group-hover:scale-105 transition-transform">
+                    <FileUpIcon className="size-6" />
+                  </div>
+                  <div className="text-xs">
+                    <span className="font-semibold text-primary">Click to upload</span> or drag and drop your CV file
+                  </div>
+                  <p className="text-[10px] text-muted-foreground">Supported formats: .pdf, .doc, .docx</p>
+                </div>
+              )}
+            </label>
           </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
-            <div className="relative">
-              <MailIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="email"
-                type="email"
-                required
-                autoComplete="email"
-                className="pl-9"
-                value={form.email}
-                onChange={(event) => updateField("email", event.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="phone">Phone</Label>
-            <div className="relative">
-              <PhoneIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="phone"
-                required
-                autoComplete="tel"
-                className="pl-9"
-                value={form.phone}
-                onChange={(event) => updateField("phone", event.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="position">Job / position</Label>
-            <div className="relative">
-              <BriefcaseBusinessIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="position"
-                required
-                className="pl-9"
-                readOnly={lockPosition}
-                value={form.position}
-                onChange={(event) => updateField("position", event.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="portfolioUrl">Portfolio</Label>
-            <div className="relative">
-              <LinkIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="portfolioUrl"
-                type="url"
-                autoComplete="url"
-                className="pl-9"
-                placeholder="https://"
-                value={form.portfolioUrl}
-                onChange={(event) => updateField("portfolioUrl", event.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="githubUrl">GitHub</Label>
-            <div className="relative">
-              <GithubIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="githubUrl"
-                type="url"
-                className="pl-9"
-                placeholder="https://github.com/"
-                value={form.githubUrl}
-                onChange={(event) => updateField("githubUrl", event.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="linkedinUrl">LinkedIn</Label>
-            <div className="relative">
-              <LinkedinIcon className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                id="linkedinUrl"
-                type="url"
-                className="pl-9"
-                placeholder="https://linkedin.com/in/"
-                value={form.linkedinUrl}
-                onChange={(event) => updateField("linkedinUrl", event.target.value)}
-              />
-            </div>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="cv">CV upload</Label>
-            <Input
-              id="cv"
-              type="file"
-              required
-              accept=".pdf,.doc,.docx,application/pdf,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-              onChange={(event) => handleFileChange(event.target.files?.[0])}
-              className={cn("cursor-pointer", cvFile && "border-accent/60")}
-            />
-          </div>
-        </div>
-
-        <div className="mt-6 flex justify-end">
-          <Button type="submit" size="lg" disabled={isSubmitting}>
+          <Button
+            type="submit"
+            size="lg"
+            className="w-full h-12 text-sm font-semibold shadow-lg shadow-primary/20 hover:shadow-primary/35 transition-all mt-4"
+            disabled={isSubmitting}
+          >
             {isSubmitting ? (
               <>
-                <Loader2Icon className="size-4 animate-spin" />
-                Submitting
+                <Loader2Icon className="size-4 animate-spin mr-2" />
+                Submitting Profile...
               </>
             ) : (
               <>
-                <SendIcon className="size-4" />
-                Submit Application
+                <SendIcon className="size-4 mr-2" />
+                Submit Application & Proceed
               </>
             )}
           </Button>
-        </div>
-      </section>
-    </form>
+        </form>
+      </div>
+    </Card>
   );
 }

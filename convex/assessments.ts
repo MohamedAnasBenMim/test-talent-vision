@@ -185,13 +185,41 @@ async function getAttemptRecording(ctx: any, attemptId: Id<"assessmentAttempts">
   };
 }
 
-function scoreAnswers(answers: AssessmentAnswer[]) {
-  const correctAnswers = QUESTION_BANK.reduce((count, question) => {
+async function getQuestionBankForInterview(ctx: any, interview: Doc<"interviews">) {
+  if (interview.applicationId) {
+    const application = await ctx.db.get(interview.applicationId);
+    if (application?.jobId) {
+      const job = await ctx.db
+        .query("jobs")
+        .withIndex("by_job_id", (q: any) => q.eq("jobId", application.jobId))
+        .first();
+      if (job?.qcmQuestions && job.qcmQuestions.length > 0) {
+        return job.qcmQuestions;
+      }
+    }
+  }
+
+  const jobs = await ctx.db.query("jobs").collect();
+  const matchedJob = jobs.find(
+    (j: any) =>
+      j.jobId === interview.title ||
+      j.title.toLowerCase() === interview.title.toLowerCase()
+  );
+
+  if (matchedJob?.qcmQuestions && matchedJob.qcmQuestions.length > 0) {
+    return matchedJob.qcmQuestions;
+  }
+
+  return QUESTION_BANK;
+}
+
+function scoreAnswers(answers: AssessmentAnswer[], questionBank: any[]) {
+  const correctAnswers = questionBank.reduce((count, question) => {
     const answer = answers.find((item) => item.questionId === question.id);
     return answer?.selectedOptionId === question.correctOptionId ? count + 1 : count;
   }, 0);
 
-  const score = Math.round((correctAnswers / QUESTION_BANK.length) * 100);
+  const score = Math.round((correctAnswers / questionBank.length) * 100);
 
   return {
     correctAnswers,
@@ -200,10 +228,10 @@ function scoreAnswers(answers: AssessmentAnswer[]) {
   };
 }
 
-function normalizeAnswers(answers: AssessmentAnswer[]) {
+function normalizeAnswers(answers: AssessmentAnswer[], questionBank: any[]) {
   return answers.filter((answer) => {
-    const question = QUESTION_BANK.find((item) => item.id === answer.questionId);
-    return Boolean(question?.options.some((option) => option.id === answer.selectedOptionId));
+    const question = questionBank.find((item: any) => item.id === answer.questionId);
+    return Boolean(question?.options.some((option: any) => option.id === answer.selectedOptionId));
   });
 }
 
@@ -244,6 +272,9 @@ export const getExamState = query({
       };
     }
 
+    const questionBank = await getQuestionBankForInterview(ctx, interview);
+    const publicQuestions = questionBank.map(({ correctOptionId, ...q }: any) => q);
+
     const attempt = isCandidate
       ? await findAttemptForIdentity(ctx, args.streamCallId, identity, currentUser)
       : null;
@@ -255,7 +286,7 @@ export const getExamState = query({
       durationMs: EXAM_DURATION_MS,
       passScore: PASS_SCORE,
       maxWarningsBeforeAutoSubmit: MAX_WARNINGS_BEFORE_AUTO_SUBMIT,
-      questions: PUBLIC_QUESTIONS,
+      questions: publicQuestions,
       attempt,
       warningCount: events.length,
       isInterviewer,
@@ -281,6 +312,7 @@ export const startAttempt = mutation({
     );
     if (existingAttempt) return existingAttempt._id;
 
+    const questionBank = await getQuestionBankForInterview(ctx, interview);
     const now = Date.now();
 
     return await ctx.db.insert("assessmentAttempts", {
@@ -291,7 +323,7 @@ export const startAttempt = mutation({
       status: "in_progress",
       startedAt: now,
       expiresAt: now + EXAM_DURATION_MS,
-      totalQuestions: QUESTION_BANK.length,
+      totalQuestions: questionBank.length,
       answers: [],
     });
   },
@@ -304,7 +336,7 @@ export const saveAnswer = mutation({
     selectedOptionId: v.string(),
   },
   handler: async (ctx, args) => {
-    const { identity, currentUser, isCandidate } = await getAuthorizedInterview(
+    const { identity, interview, currentUser, isCandidate } = await getAuthorizedInterview(
       ctx,
       args.streamCallId
     );
@@ -315,8 +347,9 @@ export const saveAnswer = mutation({
     if (attempt.status !== "in_progress") throw new Error("This assessment is already submitted");
     if (Date.now() > attempt.expiresAt) throw new Error("Assessment time has ended");
 
-    const question = QUESTION_BANK.find((item) => item.id === args.questionId);
-    if (!question?.options.some((option) => option.id === args.selectedOptionId)) {
+    const questionBank = await getQuestionBankForInterview(ctx, interview);
+    const question = questionBank.find((item: any) => item.id === args.questionId);
+    if (!question?.options.some((option: any) => option.id === args.selectedOptionId)) {
       throw new Error("Invalid answer");
     }
 
@@ -340,7 +373,7 @@ export const submitAttempt = mutation({
     autoSubmitted: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    const { identity, currentUser, isCandidate } = await getAuthorizedInterview(
+    const { identity, interview, currentUser, isCandidate } = await getAuthorizedInterview(
       ctx,
       args.streamCallId
     );
@@ -350,8 +383,9 @@ export const submitAttempt = mutation({
     if (!attempt) throw new Error("No assessment attempt found");
     if (attempt.status !== "in_progress") return attempt._id;
 
-    const answers = normalizeAnswers(attempt.answers);
-    const result = scoreAnswers(answers);
+    const questionBank = await getQuestionBankForInterview(ctx, interview);
+    const answers = normalizeAnswers(attempt.answers, questionBank);
+    const result = scoreAnswers(answers, questionBank);
 
     await ctx.db.patch(attempt._id, {
       status: args.autoSubmitted ? "auto_submitted" : "submitted",

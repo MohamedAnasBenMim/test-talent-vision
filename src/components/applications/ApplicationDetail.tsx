@@ -294,12 +294,12 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
   const recommendation = application.aiRecommendation as AiRecommendation | undefined;
 
   return (
-    <div className="container mx-auto max-w-7xl px-4 py-8 sm:px-6">
-      <div className="mb-6">
-        <Button asChild variant="ghost" className="gap-2">
+    <div className="w-full p-4 sm:p-6 lg:p-8 space-y-5">
+      <div>
+        <Button asChild variant="ghost" size="sm" className="h-8 gap-1 text-xs">
           <Link href="/dashboard/applications">
-            <ArrowLeftIcon className="size-4" />
-            Applications
+            <ArrowLeftIcon className="size-3.5" />
+            Back to Candidates
           </Link>
         </Button>
       </div>

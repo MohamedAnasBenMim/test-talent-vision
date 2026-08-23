@@ -17,8 +17,22 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import LoaderUI from "@/components/LoaderUI";
+import FormattedMarkdown from "@/components/ui/formatted-markdown";
 import { joinList, normalizeOptional, slugifyJobId, splitList } from "@/components/jobs/jobUtils";
-import { SparklesIcon, CheckCircle2Icon, CopyIcon, ExternalLinkIcon, Loader2Icon, SaveIcon } from "lucide-react";
+import {
+  SparklesIcon,
+  CheckCircle2Icon,
+  CopyIcon,
+  ExternalLinkIcon,
+  Loader2Icon,
+  SaveIcon,
+  EyeIcon,
+  ChevronDownIcon,
+  ChevronUpIcon,
+  CodeIcon,
+  HelpCircleIcon,
+  CheckIcon,
+} from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -39,6 +53,9 @@ export default function JobEditor({ jobId }: JobEditorProps) {
   const generateAction = useAction((api as any).jobGeneration?.generateJobDescription);
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showQuestionDetails, setShowQuestionDetails] = useState(false);
+  const [qcmQuestions, setQcmQuestions] = useState<any[]>([]);
+  const [codingQuestion, setCodingQuestion] = useState<any>(null);
   const [form, setForm] = useState({
     jobId: jobId ?? "",
     title: "",
@@ -69,6 +86,13 @@ export default function JobEditor({ jobId }: JobEditorProps) {
       education: existingJob.education ?? "",
       status: existingJob.status ?? "published",
     });
+
+    if (existingJob.qcmQuestions) {
+      setQcmQuestions(existingJob.qcmQuestions);
+    }
+    if (existingJob.codingQuestion) {
+      setCodingQuestion(existingJob.codingQuestion);
+    }
   }, [existingJob]);
 
   const publicUrl = useMemo(() => {
@@ -114,7 +138,15 @@ export default function JobEditor({ jobId }: JobEditorProps) {
         languages: result.languages || prev.languages,
         education: result.education || prev.education,
       }));
-      toast.success("Job details generated with AI!");
+
+      if (result.qcmQuestions && Array.isArray(result.qcmQuestions)) {
+        setQcmQuestions(result.qcmQuestions);
+      }
+      if (result.codingQuestion) {
+        setCodingQuestion(result.codingQuestion);
+      }
+
+      toast.success("Job description, QCM assessment & coding test generated with AI!");
     } catch (error: any) {
       console.error(error);
       toast.error(`Failed to generate with AI: ${error?.message || error}`);
@@ -154,9 +186,11 @@ export default function JobEditor({ jobId }: JobEditorProps) {
         languages: splitList(form.languages),
         education: normalizeOptional(form.education),
         status: form.status,
+        qcmQuestions: qcmQuestions.length > 0 ? qcmQuestions : undefined,
+        codingQuestion: codingQuestion || undefined,
       });
 
-      toast.success("Job saved");
+      toast.success("Job saved with technical assessment & coding test!");
       router.push(`/dashboard/jobs/${normalizedJobId}`);
     } catch (error) {
       console.error(error);
@@ -261,15 +295,51 @@ export default function JobEditor({ jobId }: JobEditorProps) {
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="description">Full job description</Label>
-            <Textarea
-              id="description"
-              rows={10}
-              value={form.description}
-              onChange={(event) => updateField("description", event.target.value)}
-              placeholder="Paste the full LinkedIn job post here."
-              required
-            />
+            <div className="flex items-center justify-between">
+              <Label htmlFor="description" className="text-sm font-bold text-foreground">
+                Full Job Description (Markdown Supported)
+              </Label>
+              <span className="text-[11px] font-semibold text-primary uppercase tracking-wider hidden sm:inline-block">
+                Parallel Split Editor & Live Preview
+              </span>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-2 items-stretch">
+              {/* Left Column: Markdown Input Editor */}
+              <div className="space-y-1.5 flex flex-col">
+                <div className="flex items-center justify-between text-xs text-muted-foreground px-1 font-medium">
+                  <span>Markdown Code Editor</span>
+                  <span className="text-[10px] text-muted-foreground">Type or paste below</span>
+                </div>
+                <Textarea
+                  id="description"
+                  rows={14}
+                  value={form.description}
+                  onChange={(event) => updateField("description", event.target.value)}
+                  placeholder="Write or paste your job description using Markdown..."
+                  className="font-mono text-xs leading-relaxed resize-y h-full min-h-[320px]"
+                  required
+                />
+              </div>
+
+              {/* Right Column: Parallel Live Preview */}
+              <div className="rounded-xl border border-border/80 bg-secondary/15 p-4.5 flex flex-col min-h-[320px] max-h-[550px] overflow-y-auto">
+                <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-border/60 shrink-0">
+                  <span className="text-[11px] font-extrabold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                    <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                    Live Description Preview
+                  </span>
+                  <span className="text-[10px] font-medium text-muted-foreground">Real-Time Sync</span>
+                </div>
+                {form.description ? (
+                  <FormattedMarkdown content={form.description} />
+                ) : (
+                  <div className="flex flex-col items-center justify-center flex-1 text-center text-muted-foreground py-12 space-y-1">
+                    <p className="text-xs italic">Type on the left or generate with AI to view live preview...</p>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -323,6 +393,149 @@ export default function JobEditor({ jobId }: JobEditorProps) {
               />
             </div>
           </div>
+
+          {(qcmQuestions.length > 0 || codingQuestion) && (
+            <div className="rounded-xl border border-purple-500/30 bg-purple-500/5 p-4 space-y-4 shadow-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <SparklesIcon className="size-4 text-purple-400" />
+                  <h4 className="font-semibold text-sm">AI-Generated Job Assessments</h4>
+                </div>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowQuestionDetails(!showQuestionDetails)}
+                  className="h-8 gap-1.5 text-xs text-purple-600 dark:text-purple-400 hover:bg-purple-500/10"
+                >
+                  <EyeIcon className="size-3.5" />
+                  {showQuestionDetails ? "Hide Questions" : "View Questions & Answer Key"}
+                  {showQuestionDetails ? (
+                    <ChevronUpIcon className="size-3.5" />
+                  ) : (
+                    <ChevronDownIcon className="size-3.5" />
+                  )}
+                </Button>
+              </div>
+
+              <p className="text-xs text-muted-foreground">
+                Candidates applying for this position will automatically take these tailored assessment questions.
+              </p>
+
+              <div className="grid gap-3 sm:grid-cols-2 text-xs">
+                <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+                  <p className="font-semibold text-primary flex items-center gap-1.5">
+                    <HelpCircleIcon className="size-3.5" />
+                    QCM Technical Assessment
+                  </p>
+                  <p className="mt-1 text-muted-foreground">
+                    {qcmQuestions.length} tailored multiple-choice questions
+                  </p>
+                </div>
+                <div className="rounded-lg border border-border/60 bg-background/60 p-3">
+                  <p className="font-semibold text-primary flex items-center gap-1.5">
+                    <CodeIcon className="size-3.5" />
+                    Technical Coding Challenge
+                  </p>
+                  <p className="mt-1 text-muted-foreground font-medium">
+                    {codingQuestion?.title ?? "Tailored coding question ready"}
+                  </p>
+                </div>
+              </div>
+
+              {showQuestionDetails && (
+                <div className="space-y-4 pt-3 border-t border-purple-500/20 animate-in fade-in duration-200">
+                  {/* QCM Questions Details */}
+                  {qcmQuestions.length > 0 && (
+                    <div className="space-y-3">
+                      <h5 className="text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
+                        <HelpCircleIcon className="size-4" />
+                        Generated QCM Questions ({qcmQuestions.length})
+                      </h5>
+                      <div className="space-y-3">
+                        {qcmQuestions.map((q, idx) => {
+                          const questionText = q.prompt || q.question || `Question ${idx + 1}`;
+                          return (
+                            <div
+                              key={q.id || idx}
+                              className="rounded-xl border border-border/80 bg-card p-3.5 text-xs space-y-2 shadow-2xs"
+                            >
+                              <p className="font-semibold text-foreground">
+                                <span className="text-primary font-bold mr-1">Q{idx + 1}:</span>
+                                {questionText}
+                              </p>
+                              <div className="grid gap-1.5 pl-3 pt-1">
+                                {q.options?.map((opt: any, optIdx: number) => {
+                                  const optionText = typeof opt === "object" && opt !== null ? opt.label || opt.text || JSON.stringify(opt) : String(opt);
+                                  const optionId = typeof opt === "object" && opt !== null && opt.id ? String(opt.id).toLowerCase() : String.fromCharCode(65 + optIdx).toLowerCase();
+                                  const isCorrect =
+                                    (q.correctOptionId && String(q.correctOptionId).toLowerCase() === optionId) ||
+                                    q.correctAnswer === optIdx ||
+                                    String(q.correctAnswer) === optionId;
+
+                                  return (
+                                    <div
+                                      key={optIdx}
+                                      className={`flex items-center gap-2 p-1.5 rounded-md border text-xs ${
+                                        isCorrect
+                                          ? "border-emerald-500/40 bg-emerald-500/10 font-semibold text-emerald-700 dark:text-emerald-300"
+                                          : "border-border/40 bg-secondary/30 text-muted-foreground"
+                                      }`}
+                                    >
+                                      <span className="font-bold uppercase text-[10px]">
+                                        {String.fromCharCode(65 + optIdx)}.
+                                      </span>
+                                      <span className="flex-1">{optionText}</span>
+                                      {isCorrect && (
+                                        <Badge variant="outline" className="bg-emerald-500/20 text-emerald-600 border-emerald-500/40 text-[10px] py-0 px-1.5 gap-1">
+                                          <CheckIcon className="size-3" /> Correct
+                                        </Badge>
+                                      )}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Coding Question Details */}
+                  {codingQuestion && (
+                    <div className="space-y-2 pt-2">
+                      <h5 className="text-xs font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
+                        <CodeIcon className="size-4" />
+                        Generated Coding Challenge
+                      </h5>
+                      <div className="rounded-xl border border-border/80 bg-card p-4 text-xs space-y-3 shadow-2xs">
+                        <div className="flex items-center justify-between">
+                          <h6 className="text-sm font-bold text-foreground">{codingQuestion.title}</h6>
+                          {codingQuestion.difficulty && (
+                            <Badge variant="outline" className="capitalize text-[10px]">
+                              {codingQuestion.difficulty}
+                            </Badge>
+                          )}
+                        </div>
+                        <p className="text-muted-foreground whitespace-pre-line leading-relaxed">
+                          {codingQuestion.description}
+                        </p>
+
+                        {codingQuestion.examples && codingQuestion.examples.length > 0 && (
+                          <div className="rounded-lg bg-secondary/50 p-3 space-y-1.5 font-mono text-[11px] border border-border/50">
+                            <p className="font-semibold text-xs font-sans text-foreground">Sample Test Case:</p>
+                            <div><span className="text-muted-foreground">Input:</span> {codingQuestion.examples[0].input}</div>
+                            <div><span className="text-muted-foreground">Output:</span> {codingQuestion.examples[0].output}</div>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
 
           {publicUrl && (
             <div className="rounded-lg border border-border/70 bg-background/45 p-4">

@@ -114,6 +114,7 @@ export default function AssessmentGate({ streamCallId, onCompleted }: Assessment
   const generateRecordingUploadUrl = useMutation(api.assessments.generateRecordingUploadUrl);
   const saveAssessmentRecording = useMutation(api.assessments.saveAssessmentRecording);
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [hasAgreedToRules, setHasAgreedToRules] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isCameraDialogOpen, setIsCameraDialogOpen] = useState(false);
@@ -399,7 +400,9 @@ export default function AssessmentGate({ streamCallId, onCompleted }: Assessment
       console.error("Failed to log assessment event:", error);
     }
 
-    toast.error(message);
+    toast.error(
+      `${message} If you do not obey the rules, you will fail the interview and the tab will be closed automatically.`
+    );
   };
 
   useEffect(() => {
@@ -545,7 +548,7 @@ export default function AssessmentGate({ streamCallId, onCompleted }: Assessment
 
           <Card>
             <CardHeader>
-              <CardTitle>Assessment Rules</CardTitle>
+              <CardTitle>Assessment Security Rules</CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="grid gap-3 sm:grid-cols-3">
@@ -560,13 +563,34 @@ export default function AssessmentGate({ streamCallId, onCompleted }: Assessment
                 </RuleTile>
               </div>
 
-              <div className="rounded-lg border border-border/70 bg-background/50 p-4 text-sm leading-6 text-muted-foreground">
-                Stay in fullscreen, keep this tab active, and answer without copying or pasting.
-                Prohibited activity and your camera recording are saved for recruiter review, but
-                they will not lock the interview.
+              <div className="space-y-3 rounded-lg border border-yellow-500/40 bg-yellow-500/10 p-4 text-sm leading-6 text-foreground">
+                <p>
+                  Stay in fullscreen, keep this tab active, and answer without copying or pasting. Prohibited activities include switching between tabs, copy-pasting, and right-clicking. Your camera must remain open during all of the interview and it is recorded.
+                </p>
+                <div className="flex items-center gap-2 font-semibold text-destructive">
+                  <AlertTriangleIcon className="size-4 shrink-0 text-destructive" />
+                  <span>WARNING: If you do not obey the rules, you will fail the interview and the tab will be closed automatically.</span>
+                </div>
               </div>
 
-              <Button className="w-full gap-2" size="lg" onClick={openCameraCheck}>
+              <label className="flex items-start gap-3 rounded-lg border border-border/70 bg-background/60 p-4 cursor-pointer hover:border-primary/50 transition-colors">
+                <input
+                  type="checkbox"
+                  className="mt-1 size-4 rounded accent-primary cursor-pointer shrink-0"
+                  checked={hasAgreedToRules}
+                  onChange={(e) => setHasAgreedToRules(e.target.checked)}
+                />
+                <span className="text-sm leading-5">
+                  I agree to all of these security rules. I confirm my camera will remain open and recorded during all of the interview, and I understand that failing to obey these rules will result in failing the interview.
+                </span>
+              </label>
+
+              <Button
+                className="w-full gap-2"
+                size="lg"
+                onClick={openCameraCheck}
+                disabled={!hasAgreedToRules}
+              >
                 <CameraIcon className="size-4" />
                 Start Assessment
               </Button>
@@ -664,8 +688,17 @@ export default function AssessmentGate({ streamCallId, onCompleted }: Assessment
           </div>
         </div>
 
+        {warningCount > 0 && (
+          <div className="mb-4 flex items-center gap-3 rounded-lg border border-destructive/40 bg-destructive/10 p-4 text-sm font-medium text-destructive">
+            <AlertTriangleIcon className="size-5 shrink-0" />
+            <span>
+              Warning ({warningCount}): Prohibited activity detected (switching tabs, copy/paste, or right-clicking). If you do not obey the rules, you will fail the interview and the tab will be closed automatically.
+            </span>
+          </div>
+        )}
+
         <div className="grid gap-4">
-          {examState.questions.map((question, questionIndex) => (
+          {examState.questions.map((question: any, questionIndex: number) => (
             <Card key={question.id}>
               <CardHeader>
                 <CardTitle className="flex gap-3 text-lg">
@@ -676,7 +709,7 @@ export default function AssessmentGate({ streamCallId, onCompleted }: Assessment
                 </CardTitle>
               </CardHeader>
               <CardContent className="grid gap-3">
-                {question.options.map((option) => {
+                {question.options.map((option: any) => {
                   const selected = answers[question.id] === option.id;
 
                   return (

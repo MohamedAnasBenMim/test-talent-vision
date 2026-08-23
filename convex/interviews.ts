@@ -106,27 +106,54 @@ export const updateInterviewStatus = mutation({
   },
 });
 
+export const deleteInterview = mutation({
+  args: { id: v.id("interviews") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error("Unauthorized");
+
+    const interview = await ctx.db.get(args.id);
+    if (!interview) return;
+
+    // Delete associated comments
+    const comments = await ctx.db
+      .query("comments")
+      .withIndex("by_interview_id", (q) => q.eq("interviewId", interview._id))
+      .collect();
+
+    for (const comment of comments) {
+      await ctx.db.delete(comment._id);
+    }
+
+    // Delete associated code sessions if streamCallId exists
+    if (interview.streamCallId) {
+      const codeSessions = await ctx.db
+        .query("codeSessions")
+        .withIndex("by_stream_call_id", (q) => q.eq("streamCallId", interview.streamCallId))
+        .collect();
+
+      for (const session of codeSessions) {
+        await ctx.db.delete(session._id);
+      }
+    }
+
+    await ctx.db.delete(interview._id);
+  },
+});
+
 export const deleteByStreamCallId = mutation({
   args: { streamCallId: v.string() },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error("Unauthorized");
 
-    const currentUser = await ctx.db
-      .query("users")
-      .withIndex("by_clerk_id", (q) => q.eq("clerkId", identity.subject))
-      .first();
-
-    if (currentUser?.role !== "interviewer") {
-      throw new Error("Only interviewers can delete calls");
-    }
-
-    const interview = await ctx.db
+    // Collect and delete all interviews matching streamCallId
+    const interviews = await ctx.db
       .query("interviews")
       .withIndex("by_stream_call_id", (q) => q.eq("streamCallId", args.streamCallId))
-      .first();
+      .collect();
 
-    if (interview) {
+    for (const interview of interviews) {
       const comments = await ctx.db
         .query("comments")
         .withIndex("by_interview_id", (q) => q.eq("interviewId", interview._id))
@@ -139,13 +166,47 @@ export const deleteByStreamCallId = mutation({
       await ctx.db.delete(interview._id);
     }
 
-    const codeSession = await ctx.db
+    // Collect and delete all code sessions matching streamCallId
+    const codeSessions = await ctx.db
       .query("codeSessions")
+      .withIndex("by_stream_call_id", (q) => q.eq("streamCallId", args.streamCallId))
+      .collect();
+
+    for (const session of codeSessions) {
+      await ctx.db.delete(session._id);
+    }
+  },
+});
+
+export const getJobForStreamCall = query({
+  args: { streamCallId: v.string() },
+  handler: async (ctx, args) => {
+    const interview = await ctx.db
+      .query("interviews")
       .withIndex("by_stream_call_id", (q) => q.eq("streamCallId", args.streamCallId))
       .first();
 
-    if (codeSession) {
-      await ctx.db.delete(codeSession._id);
+    if (!interview) return null;
+
+    if (interview.applicationId) {
+      const application = await ctx.db.get(interview.applicationId);
+      if (application?.jobId) {
+        const targetJobId = application.jobId;
+        const job = await ctx.db
+          .query("jobs")
+          .withIndex("by_job_id", (q) => q.eq("jobId", targetJobId))
+          .first();
+        if (job) return job;
+      }
     }
+
+    const jobs = await ctx.db.query("jobs").collect();
+    return (
+      jobs.find(
+        (j) =>
+          j.jobId === interview.title ||
+          j.title.toLowerCase() === interview.title.toLowerCase()
+      ) ?? null
+    );
   },
 });

@@ -1,4 +1,4 @@
-import { Clock, Code2, Calendar, Users } from "lucide-react";
+import { Clock, Code2, Calendar, Users, Sparkles } from "lucide-react";
 
 export const INTERVIEW_CATEGORY = [
   { id: "live", title: "Live Now", variant: "default" },
@@ -30,32 +30,32 @@ export const TIME_SLOTS = [
 
 export const QUICK_ACTIONS = [
   {
-    icon: Code2,
-    title: "New Call",
-    description: "Start an instant call",
+    icon: Sparkles,
+    title: "Create AI Position",
+    description: "Generate job, QCM & coding test",
+    href: "/dashboard/jobs/new",
     color: "primary",
-    gradient: "from-primary/10 via-primary/5 to-transparent",
-  },
-  {
-    icon: Users,
-    title: "Join Interview",
-    description: "Enter via invitation link",
-    color: "purple-500",
-    gradient: "from-purple-500/10 via-purple-500/5 to-transparent",
   },
   {
     icon: Calendar,
-    title: "Schedule",
-    description: "Plan upcoming interviews",
-    color: "blue-500",
-    gradient: "from-blue-500/10 via-blue-500/5 to-transparent",
+    title: "Schedule Interview",
+    description: "Invite candidate for assessment",
+    href: "/schedule",
+    color: "purple-500",
   },
   {
-    icon: Clock,
-    title: "Recordings",
-    description: "Access past interviews",
-    color: "orange-500",
-    gradient: "from-orange-500/10 via-orange-500/5 to-transparent",
+    icon: Users,
+    title: "Review Candidates",
+    description: "View CV scores & QCM results",
+    href: "/dashboard/applications",
+    color: "blue-500",
+  },
+  {
+    icon: Sparkles,
+    title: "AI Insights",
+    description: "Pipeline scoring & analytics",
+    href: "/dashboard/ai-insights",
+    color: "emerald-500",
   },
 ];
 

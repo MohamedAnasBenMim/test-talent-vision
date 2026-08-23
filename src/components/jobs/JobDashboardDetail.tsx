@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { useQuery } from "convex/react";
+import { useState, useMemo } from "react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import LoaderUI from "@/components/LoaderUI";
 import JobEditor from "@/components/jobs/JobEditor";
@@ -14,13 +14,20 @@ import {
   getAiRecommendationVariant,
 } from "@/components/applications/status";
 import { format } from "date-fns";
-import { ArrowLeftIcon, CopyIcon, ExternalLinkIcon, MailIcon, PhoneIcon } from "lucide-react";
+import { ArrowLeftIcon, CopyIcon, ExternalLinkIcon, MailIcon, PhoneIcon, Trash2Icon, Loader2Icon } from "lucide-react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
+import ConfirmDeleteModal from "@/components/jobs/ConfirmDeleteModal";
 
 export default function JobDashboardDetail({ jobId }: { jobId: string }) {
+  const router = useRouter();
   const job = useQuery(api.applications.getJobByJobId, { jobId });
   const applications = useQuery(api.applications.getApplicationsByJobId, { jobId });
+  const deleteJob = useMutation(api.applications.deleteJob);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteModal, setShowDeleteModal] = useState(false);
+
   const publicUrl = useMemo(() => {
     if (typeof window === "undefined") return "";
     return `${window.location.origin}/jobs/${jobId}`;
@@ -30,6 +37,19 @@ export default function JobDashboardDetail({ jobId }: { jobId: string }) {
     if (!publicUrl) return;
     await navigator.clipboard.writeText(publicUrl);
     toast.success("Public job link copied");
+  };
+
+  const confirmDelete = async () => {
+    setIsDeleting(true);
+    try {
+      await deleteJob({ jobId });
+      toast.success("Job position deleted successfully");
+      router.push("/dashboard/jobs");
+    } catch (error: any) {
+      console.error(error);
+      toast.error(error?.message || "Failed to delete job position");
+      setIsDeleting(false);
+    }
   };
 
   if (job === undefined || applications === undefined) return <LoaderUI />;
@@ -50,12 +70,12 @@ export default function JobDashboardDetail({ jobId }: { jobId: string }) {
   }
 
   return (
-    <div className="container mx-auto max-w-7xl px-4 py-8 sm:px-6">
-      <div className="mb-6 flex flex-wrap items-center justify-between gap-3">
-        <Button asChild variant="ghost">
+    <div className="w-full p-4 sm:p-6 lg:p-8 space-y-5">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <Button asChild variant="ghost" size="sm" className="h-8 gap-1 text-xs">
           <Link href="/dashboard/jobs">
-            <ArrowLeftIcon className="size-4" />
-            Jobs
+            <ArrowLeftIcon className="size-3.5" />
+            Back to Positions
           </Link>
         </Button>
         <div className="flex flex-wrap gap-2">
@@ -63,14 +83,26 @@ export default function JobDashboardDetail({ jobId }: { jobId: string }) {
             <CopyIcon className="size-4" />
             Copy Public Link
           </Button>
-          <Button asChild>
+          <Button asChild variant="secondary">
             <Link href={`/jobs/${job.jobId}`} target="_blank">
               <ExternalLinkIcon className="size-4" />
               Open Candidate Page
             </Link>
           </Button>
+          <Button variant="destructive" onClick={() => setShowDeleteModal(true)} disabled={isDeleting}>
+            {isDeleting ? <Loader2Icon className="size-4 animate-spin" /> : <Trash2Icon className="size-4" />}
+            Delete Job
+          </Button>
         </div>
       </div>
+
+      <ConfirmDeleteModal
+        isOpen={showDeleteModal}
+        onClose={() => setShowDeleteModal(false)}
+        onConfirm={confirmDelete}
+        title={job.title || jobId}
+        isDeleting={isDeleting}
+      />
 
       <div className="grid gap-6 lg:grid-cols-[0.95fr_1.05fr]">
         <section className="space-y-6">

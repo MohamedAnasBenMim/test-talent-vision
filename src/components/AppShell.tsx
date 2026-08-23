@@ -4,6 +4,7 @@ import { RedirectToSignIn, SignedIn, SignedOut } from "@clerk/nextjs";
 import { usePathname } from "next/navigation";
 import Navbar from "@/components/Navbar";
 import Sidebar from "@/components/Sidebar";
+import { useUserRole } from "@/hooks/useUserRole";
 
 /**
  * Routes that show only the top navbar (no sidebar).
@@ -40,8 +41,21 @@ function FullScreenFrame({ children }: { children: React.ReactNode }) {
   return <>{children}</>;
 }
 
-/** Authenticated pages: persistent left sidebar + scrollable main */
+/** Authenticated pages: persistent left sidebar for recruiters, top navbar frame for candidates */
 function DashboardFrame({ children }: { children: React.ReactNode }) {
+  const { isCandidate } = useUserRole();
+
+  if (isCandidate) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col">
+        <Navbar />
+        <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8">
+          {children}
+        </main>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-screen overflow-hidden bg-background">
       {/* Super Recruiter signature far-left gradient bar */}

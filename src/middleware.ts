@@ -1,11 +1,24 @@
-import { clerkMiddleware } from "@clerk/nextjs/server";
+import { clerkMiddleware, createRouteMatcher } from "@clerk/nextjs/server";
 import { NextResponse } from "next/server";
 
 const hasClerkConfig = Boolean(
   process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY && process.env.CLERK_SECRET_KEY
 );
 
-export default hasClerkConfig ? clerkMiddleware() : () => NextResponse.next();
+// Routes that require authentication — candidates must sign in before joining
+const isProtectedRoute = createRouteMatcher([
+  "/meeting(.*)",
+  "/dashboard(.*)",
+  "/schedule(.*)",
+]);
+
+export default hasClerkConfig
+  ? clerkMiddleware(async (auth, req) => {
+      if (isProtectedRoute(req)) {
+        await auth.protect();
+      }
+    })
+  : () => NextResponse.next();
 
 export const config = {
   matcher: [
@@ -15,3 +28,4 @@ export const config = {
     "/(api|trpc)(.*)",
   ],
 };
+

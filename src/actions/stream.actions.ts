@@ -22,14 +22,10 @@ function getStreamClient() {
 
 export const streamTokenProvider = async () => {
   const user = await currentUser();
-
   if (!user) throw new Error("User not authenticated");
 
   const streamClient = getStreamClient();
-
-  const token = streamClient.generateUserToken({ user_id: user.id });
-
-  return token;
+  return streamClient.generateUserToken({ user_id: user.id });
 };
 
 export async function createStreamInterviewCall({

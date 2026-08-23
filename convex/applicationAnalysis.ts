@@ -30,8 +30,8 @@ type CvAnalysisResult = {
   decisionReason: string;
 };
 
-const DEFAULT_GEMINI_MODEL = "gemini-3.6-flash";
-const GEMINI_FALLBACK_MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-2.5-flash"];
+const DEFAULT_GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_FALLBACK_MODELS = ["gemini-1.5-flash", "gemini-2.0-flash", "gemini-1.5-pro"];
 const GEMINI_MAX_ATTEMPTS = 3;
 const GEMINI_RETRY_BASE_DELAY_MS = 1200;
 
@@ -46,22 +46,22 @@ class GeminiRequestError extends Error {
 }
 
 const ANALYSIS_RESPONSE_SCHEMA = {
-  type: "object",
+  type: "OBJECT",
   properties: {
     score: {
-      type: "number",
+      type: "NUMBER",
       description: "A numeric match score from 0 to 100.",
     },
     recommendation: {
-      type: "string",
+      type: "STRING",
       enum: ["strong_match", "maybe", "weak_match"],
     },
-    matchedSkills: { type: "array", items: { type: "string" } },
-    missingSkills: { type: "array", items: { type: "string" } },
-    experienceSummary: { type: "string" },
-    strengths: { type: "array", items: { type: "string" } },
-    concerns: { type: "array", items: { type: "string" } },
-    decisionReason: { type: "string" },
+    matchedSkills: { type: "ARRAY", items: { type: "STRING" } },
+    missingSkills: { type: "ARRAY", items: { type: "STRING" } },
+    experienceSummary: { type: "STRING" },
+    strengths: { type: "ARRAY", items: { type: "STRING" } },
+    concerns: { type: "ARRAY", items: { type: "STRING" } },
+    decisionReason: { type: "STRING" },
   },
   required: [
     "score",
@@ -91,7 +91,16 @@ export const rerunApplicationAnalysis = action({
       throw new Error("No job requirements found for this application");
     }
 
-    return await runAiAnalysis(ctx, args.id, jobRequirements);
+    try {
+      return await runAiAnalysis(ctx, args.id, jobRequirements);
+    } catch (error) {
+      console.error("Rerun AI analysis error:", error);
+      await ctx.runMutation(internal.applications.markAnalysisFailed, {
+        id: args.id,
+        message: error instanceof Error ? error.message : "AI analysis failed",
+      });
+      throw error;
+    }
   },
 });
 
@@ -445,26 +454,41 @@ Required JSON shape:
 }
 
 function extractGeminiOutputText(payload: any) {
-  const texts =
+  const parts =
     payload.candidates
       ?.flatMap((candidate: any) => candidate.content?.parts ?? [])
-      ?.filter((part: any) => typeof part.text === "string")
+      ?.filter((part: any) => typeof part.text === "string" && part.text.trim().length > 0)
       ?.map((part: any) => part.text) ?? [];
 
-  const text = texts.join("\n").trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
-  if (!text) throw new Error("Gemini returned no analysis text");
-  return text;
+  if (!parts.length) throw new Error("Gemini returned no analysis text");
+  return parts.join("\n").trim();
 }
 
 function parseGeminiAnalysisJson(text: string) {
+  // 1. Direct JSON parse
   try {
     return JSON.parse(text);
-  } catch {
-    const start = text.indexOf("{");
-    const end = text.lastIndexOf("}");
-    if (start < 0 || end <= start) throw new Error("Gemini returned invalid analysis JSON");
-    return JSON.parse(text.slice(start, end + 1));
+  } catch {}
+
+  // 2. Extract content inside ```json ... ``` code fences
+  const codeFenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  if (codeFenceMatch && codeFenceMatch[1]) {
+    try {
+      return JSON.parse(codeFenceMatch[1].trim());
+    } catch {}
   }
+
+  // 3. Find JSON object enclosing braces
+  const start = text.indexOf("{");
+  const end = text.lastIndexOf("}");
+  if (start >= 0 && end > start) {
+    const candidateStr = text.slice(start, end + 1);
+    try {
+      return JSON.parse(candidateStr);
+    } catch {}
+  }
+
+  throw new Error("Gemini returned invalid analysis JSON");
 }
 
 function normalizeAnalysisResult(value: any): CvAnalysisResult {

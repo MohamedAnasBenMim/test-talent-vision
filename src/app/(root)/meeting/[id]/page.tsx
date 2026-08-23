@@ -4,19 +4,22 @@ import { api } from "../../../../../convex/_generated/api";
 import BrandMark from "@/components/BrandMark";
 import { Button } from "@/components/ui/button";
 import LoaderUI from "@/components/LoaderUI";
-import MeetingRoom from "@/components/MeetingRoom";
-import MeetingSetup from "@/components/MeetingSetup";
 import AssessmentGate from "@/components/assessments/AssessmentGate";
 import useGetCallById from "@/hooks/useGetCallById";
 import { useUserRole } from "@/hooks/useUserRole";
 import { getMeetingStatus } from "@/lib/utils";
 import { useUser } from "@clerk/nextjs";
-import { StreamCall, StreamTheme } from "@stream-io/video-react-sdk";
 import { useQuery } from "convex/react";
 import { format } from "date-fns";
 import { CalendarIcon, ClockIcon, VideoIcon } from "lucide-react";
 import { useParams } from "next/navigation";
 import { useEffect, useState } from "react";
+import dynamic from "next/dynamic";
+
+const MeetingContainer = dynamic(() => import("@/components/MeetingContainer"), {
+  ssr: false,
+  loading: () => <LoaderUI />,
+});
 
 function formatStartsIn(startTime: number, now: number) {
   const remainingMs = Math.max(0, startTime - now);
@@ -41,7 +44,6 @@ function MeetingPage() {
     streamCallId ? { streamCallId } : "skip"
   );
 
-  const [isSetupComplete, setIsSetupComplete] = useState(false);
   const [isEntryConfirmed, setIsEntryConfirmed] = useState(false);
   const [isAssessmentPassed, setIsAssessmentPassed] = useState(false);
   const [now, setNow] = useState(Date.now());
@@ -103,17 +105,7 @@ function MeetingPage() {
     }
   }
 
-  return (
-    <StreamCall call={call}>
-      <StreamTheme>
-        {!isSetupComplete ? (
-          <MeetingSetup onSetupComplete={() => setIsSetupComplete(true)} />
-        ) : (
-          <MeetingRoom />
-        )}
-      </StreamTheme>
-    </StreamCall>
-  );
+  return <MeetingContainer call={call} />;
 }
 
 function InterviewEntryGate({

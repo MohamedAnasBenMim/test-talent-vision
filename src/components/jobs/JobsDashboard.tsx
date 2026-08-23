@@ -1,6 +1,6 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import LoaderUI from "@/components/LoaderUI";
 import { Badge } from "@/components/ui/badge";
@@ -18,14 +18,20 @@ import {
   SearchIcon,
   UsersIcon,
   SparklesIcon,
+  Trash2Icon,
 } from "lucide-react";
 import Link from "next/link";
 import { useState, useMemo } from "react";
+import toast from "react-hot-toast";
+import ConfirmDeleteModal from "@/components/jobs/ConfirmDeleteModal";
 
 export default function JobsDashboard() {
   const jobs = useQuery(api.applications.getJobs);
   const applications = useQuery(api.applications.getApplications);
+  const deleteJob = useMutation(api.applications.deleteJob);
   const [searchTerm, setSearchTerm] = useState("");
+  const [deletingTarget, setDeletingTarget] = useState<{ jobId: string; title: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const filteredJobs = useMemo(() => {
     if (!jobs) return [];
@@ -39,10 +45,25 @@ export default function JobsDashboard() {
     );
   }, [jobs, searchTerm]);
 
+  const confirmDelete = async () => {
+    if (!deletingTarget) return;
+    setIsDeleting(true);
+    try {
+      await deleteJob({ jobId: deletingTarget.jobId });
+      toast.success("Job position removed");
+      setDeletingTarget(null);
+    } catch (err: any) {
+      console.error(err);
+      toast.error(err?.message || "Failed to delete job position");
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   if (jobs === undefined) return <LoaderUI />;
 
   return (
-    <div className="container mx-auto max-w-7xl p-6 space-y-6">
+    <div className="w-full p-4 sm:p-6 lg:p-8 space-y-5">
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -174,17 +195,36 @@ export default function JobsDashboard() {
                     <span>{candidateCount} Applicants</span>
                   </div>
 
-                  <Button asChild size="sm">
-                    <Link href={`/dashboard/jobs/${job.jobId}`}>
-                      Manage <ChevronRightIcon className="size-3.5" />
-                    </Link>
-                  </Button>
+                  <div className="flex items-center gap-2">
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      className="size-8 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                      title="Delete Position"
+                      onClick={() => setDeletingTarget({ jobId: job.jobId, title: job.title })}
+                    >
+                      <Trash2Icon className="size-4" />
+                    </Button>
+                    <Button asChild size="sm">
+                      <Link href={`/dashboard/jobs/${job.jobId}`}>
+                        Manage <ChevronRightIcon className="size-3.5" />
+                      </Link>
+                    </Button>
+                  </div>
                 </div>
               </Card>
             );
           })}
         </div>
       )}
+
+      <ConfirmDeleteModal
+        isOpen={Boolean(deletingTarget)}
+        onClose={() => setDeletingTarget(null)}
+        onConfirm={confirmDelete}
+        title={deletingTarget?.title || ""}
+        isDeleting={isDeleting}
+      />
     </div>
   );
 }

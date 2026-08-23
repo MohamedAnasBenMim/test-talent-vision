@@ -33,12 +33,17 @@ export default function Home() {
 
   const { isInterviewer, isCandidate, isLoading } = useUserRole();
   const interviews = useQuery(api.interviews.getMyInterviews);
-  const jobs = useQuery(api.applications.getJobs);
-  const applications = useQuery(api.applications.getApplications);
-  const allInterviews = useQuery(api.interviews.getAllInterviews);
+  const jobs = useQuery(api.applications.getJobs, isInterviewer ? {} : "skip");
+  const applications = useQuery(api.applications.getApplications, isInterviewer ? {} : "skip");
+  const allInterviews = useQuery(api.interviews.getAllInterviews, isInterviewer ? {} : "skip");
 
   const [showModal, setShowModal] = useState(false);
   const [modalType, setModalType] = useState<"start" | "join">();
+
+  const completedInterview = useMemo(() => {
+    if (!isCandidate || !interviews) return undefined;
+    return interviews.find((interview) => interview.status === "completed");
+  }, [interviews, isCandidate]);
 
   const candidateNextInterview = useMemo(() => {
     if (!isCandidate || !interviews) return undefined;
@@ -71,9 +76,6 @@ export default function Home() {
         break;
       case "Schedule":
         router.push("/schedule");
-        break;
-      case "Recordings":
-        router.push("/recordings");
         break;
       default:
         router.push("/");
@@ -108,15 +110,41 @@ export default function Home() {
   if (isCandidate) {
     if (interviews === undefined || candidateNextInterview) return <LoaderUI />;
 
+    if (completedInterview) {
+      return (
+        <div className="container mx-auto flex min-h-[calc(100vh-6rem)] max-w-2xl items-center justify-center p-6">
+          <section className="w-full rounded-3xl border border-emerald-500/30 bg-emerald-500/10 p-8 text-center shadow-lg space-y-5">
+            <div className="mx-auto flex size-16 items-center justify-center rounded-2xl bg-emerald-500/20 text-emerald-500">
+              <CheckCircle2Icon className="size-9" />
+            </div>
+            <div className="space-y-2">
+              <Badge variant="outline" className="bg-emerald-500/10 text-emerald-600 border-emerald-500/30">
+                Completed & Submitted
+              </Badge>
+              <h1 className="text-2xl font-bold tracking-tight text-emerald-700 dark:text-emerald-300">
+                Technical Assessment Completed!
+              </h1>
+              <p className="mx-auto max-w-md text-sm leading-relaxed text-muted-foreground">
+                Thank you for completing your technical interview for <strong className="text-foreground">{completedInterview.title}</strong>. Your code submission and proctoring session recording have been securely sent to the recruiter team for review.
+              </p>
+            </div>
+            <div className="pt-2 border-t border-emerald-500/20 text-xs text-muted-foreground">
+              Status: <span className="font-semibold text-emerald-600 dark:text-emerald-400">Under Recruiter Evaluation</span>
+            </div>
+          </section>
+        </div>
+      );
+    }
+
     return (
-      <div className="container mx-auto flex min-h-[calc(100vh-4rem)] max-w-3xl items-center justify-center p-6">
+      <div className="container mx-auto flex min-h-[calc(100vh-6rem)] max-w-3xl items-center justify-center p-6">
         <section className="w-full rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
           <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
             <CalendarXIcon className="size-7" />
           </div>
-          <h1 className="mt-5 text-2xl font-bold tracking-tight">No Interview Invitation</h1>
+          <h1 className="mt-5 text-2xl font-bold tracking-tight">No Active Interview Invitation</h1>
           <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-            You do not have an upcoming technical interview yet. When an interviewer sends you an
+            You do not have an active technical interview yet. When an interviewer sends you an
             invitation link, open it to take your assessment.
           </p>
         </section>
@@ -375,16 +403,19 @@ export default function Home() {
           </CardContent>
         </Card>
 
-        {/* Quick Launch Card */}
+        {/* Super Recruiter Quick Launch Card */}
         <Card>
           <CardHeader className="py-4">
-            <CardTitle className="text-lg font-bold">Quick Actions</CardTitle>
+            <CardTitle className="text-lg font-bold flex items-center gap-2">
+              <SparklesIcon className="size-5 text-primary" />
+              Recruiter Quick Tools
+            </CardTitle>
           </CardHeader>
           <CardContent className="space-y-3">
             {QUICK_ACTIONS.map((action) => (
-              <button
+              <Link
                 key={action.title}
-                onClick={() => handleQuickAction(action.title)}
+                href={action.href}
                 className="w-full flex items-center justify-between p-3 rounded-xl border border-border bg-card hover:bg-secondary/40 hover:border-primary/40 transition-all text-left group"
               >
                 <div className="flex items-center gap-3">
@@ -397,7 +428,7 @@ export default function Home() {
                   </div>
                 </div>
                 <ChevronRightIcon className="size-4 text-muted-foreground group-hover:text-primary transition-colors" />
-              </button>
+              </Link>
             ))}
           </CardContent>
         </Card>

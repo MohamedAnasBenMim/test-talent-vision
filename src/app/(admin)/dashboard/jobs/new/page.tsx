@@ -1,3 +1,5 @@
+"use client";
+
 import JobEditor from "@/components/jobs/JobEditor";
 import { Button } from "@/components/ui/button";
 import { ArrowLeftIcon } from "lucide-react";
@@ -5,12 +7,12 @@ import Link from "next/link";
 
 export default function NewJobPage() {
   return (
-    <div className="container mx-auto max-w-5xl px-4 py-8 sm:px-6">
-      <div className="mb-6">
-        <Button asChild variant="ghost">
+    <div className="w-full p-4 sm:p-6 lg:p-8 space-y-4">
+      <div>
+        <Button asChild variant="ghost" size="sm" className="h-8 gap-1 text-xs">
           <Link href="/dashboard/jobs">
-            <ArrowLeftIcon className="size-4" />
-            Jobs
+            <ArrowLeftIcon className="size-3.5" />
+            Back to Positions
           </Link>
         </Button>
       </div>

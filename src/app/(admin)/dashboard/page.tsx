@@ -12,11 +12,13 @@ import { INTERVIEW_CATEGORY } from "@/constants";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { deleteStreamCall } from "@/actions/recording.actions";
 import {
   CalendarIcon,
   CheckCircle2Icon,
   ClockIcon,
   PlusIcon,
+  Trash2Icon,
   VideoIcon,
   XCircleIcon,
   SparklesIcon,
@@ -33,8 +35,10 @@ function DashboardPage() {
   const users = useQuery(api.users.getUsers);
   const interviews = useQuery(api.interviews.getAllInterviews);
   const updateStatus = useMutation(api.interviews.updateInterviewStatus);
+  const deleteInterview = useMutation(api.interviews.deleteInterview);
   const { joinMeeting } = useMeetingActions();
   const [now, setNow] = useState(Date.now());
+  const [deletingId, setDeletingId] = useState<string | null>(null);
 
   useEffect(() => {
     const interval = window.setInterval(() => setNow(Date.now()), 30000);
@@ -50,12 +54,28 @@ function DashboardPage() {
     }
   };
 
+  const handleDeleteInterview = async (interviewId: Id<"interviews">, streamCallId?: string) => {
+    try {
+      setDeletingId(interviewId);
+      if (streamCallId) {
+        await deleteStreamCall({ callId: streamCallId });
+      }
+      await deleteInterview({ id: interviewId });
+      toast.success("Interview deleted permanently");
+    } catch (error) {
+      console.error("Failed to delete interview:", error);
+      toast.error("Failed to delete interview");
+    } finally {
+      setDeletingId(null);
+    }
+  };
+
   if (!interviews || !users) return <LoaderUI />;
 
   const groupedInterviews = groupInterviews(interviews);
 
   return (
-    <div className="container mx-auto max-w-7xl p-6 space-y-8">
+    <div className="w-full p-4 sm:p-6 lg:p-8 space-y-5">
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
@@ -108,19 +128,31 @@ function DashboardPage() {
                         className="group hover:border-primary/50 hover:shadow-md transition-all flex flex-col justify-between"
                       >
                         <CardHeader className="p-5 pb-3">
-                          <div className="flex items-center gap-3">
-                            <Avatar className="h-10 w-10 border border-border">
-                              <AvatarImage src={candidateInfo.image} />
-                              <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs">
-                                {candidateInfo.initials}
-                              </AvatarFallback>
-                            </Avatar>
-                            <div className="min-w-0">
-                              <CardTitle className="text-base font-bold truncate group-hover:text-primary transition-colors">
-                                {candidateInfo.name}
-                              </CardTitle>
-                              <p className="text-xs text-muted-foreground truncate">{interview.title}</p>
+                          <div className="flex items-center justify-between gap-3">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <Avatar className="h-10 w-10 border border-border shrink-0">
+                                <AvatarImage src={candidateInfo.image} />
+                                <AvatarFallback className="bg-primary/10 text-primary font-bold text-xs">
+                                  {candidateInfo.initials}
+                                </AvatarFallback>
+                              </Avatar>
+                              <div className="min-w-0">
+                                <CardTitle className="text-base font-bold truncate group-hover:text-primary transition-colors">
+                                  {candidateInfo.name}
+                                </CardTitle>
+                                <p className="text-xs text-muted-foreground truncate">{interview.title}</p>
+                              </div>
                             </div>
+                            <Button
+                              variant="ghost"
+                              size="icon"
+                              className="h-8 w-8 shrink-0 text-muted-foreground hover:text-destructive hover:bg-destructive/10"
+                              title="Delete Interview"
+                              disabled={deletingId === interview._id}
+                              onClick={() => handleDeleteInterview(interview._id, interview.streamCallId)}
+                            >
+                              <Trash2Icon className="size-4" />
+                            </Button>
                           </div>
                         </CardHeader>
 

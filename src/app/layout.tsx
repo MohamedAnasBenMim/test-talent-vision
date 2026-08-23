@@ -9,6 +9,8 @@ import MissingEnvSetup from "@/components/MissingEnvSetup";
 import { getMissingEnvVars } from "@/lib/env";
 import AppShell from "@/components/AppShell";
 
+import StreamVideoProvider from "@/components/providers/StreamClientProvider";
+
 const geistSans = localFont({
   src: "./fonts/GeistVF.woff",
   variable: "--font-geist-sans",
@@ -46,7 +48,9 @@ export default function RootLayout({
         >
           {isConfigured ? (
             <ConvexClerkProvider>
-              <AppShell>{children}</AppShell>
+              <StreamVideoProvider>
+                <AppShell>{children}</AppShell>
+              </StreamVideoProvider>
             </ConvexClerkProvider>
           ) : (
             <MissingEnvSetup missingEnvVars={missingEnvVars} />
