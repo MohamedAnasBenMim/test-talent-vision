@@ -20,14 +20,19 @@ function MeetingContent() {
             <CheckCircle2Icon className="size-8" />
           </div>
           <h2 className="text-2xl font-bold text-emerald-600 dark:text-emerald-400 tracking-tight">
-            Assessment Completed!
+            Assessment Completed & Submitted!
           </h2>
           <p className="text-sm text-muted-foreground leading-relaxed">
-            Your technical assessment code and proctoring recording have been saved successfully for recruiter review.
+            Thank you for completing your technical interview. Your code submission and proctoring session recording have been securely sent to the recruiter team for review.
           </p>
-          <Button className="w-full bg-emerald-600 hover:bg-emerald-700 text-white font-semibold" onClick={() => (window.location.href = "/")}>
-            Return to Dashboard
-          </Button>
+          <div className="py-1">
+            <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 py-1.5 px-3 rounded-full border border-emerald-500/30">
+              ✨ You can safely close this tab now
+            </span>
+          </div>
+          <div className="pt-2 text-xs text-muted-foreground">
+            Status: <span className="font-semibold text-emerald-600 dark:text-emerald-400">Under Recruiter Evaluation</span>
+          </div>
         </div>
       </div>
     );

@@ -302,6 +302,69 @@ export const updateApplicationStatus = mutation({
   },
 });
 
+export const updateCandidateFinalEvaluation = mutation({
+  args: {
+    id: v.id("applications"),
+    technicalScore: v.optional(v.number()),
+    status: v.optional(
+      v.union(
+        v.literal("submitted"),
+        v.literal("cv_analyzing"),
+        v.literal("cv_review_required"),
+        v.literal("cv_rejected"),
+        v.literal("technical_invited"),
+        v.literal("technical_passed"),
+        v.literal("technical_failed"),
+        v.literal("hr_shortlisted"),
+        v.literal("hr_rejected"),
+        v.literal("saved_to_talent_pool")
+      )
+    ),
+  },
+  handler: async (ctx, args) => {
+    await assertInterviewer(ctx);
+
+    const application = await ctx.db.get(args.id);
+    if (!application) throw new Error("Application not found");
+
+    const cvScore = application.cvScore ?? application.aiScore ?? 75;
+    const techScore = args.technicalScore ?? application.technicalScore ?? 85;
+
+    // Weighted Composite Score: 40% CV + 60% Technical
+    const finalScore = Math.min(100, Math.round(cvScore * 0.4 + techScore * 0.6));
+
+    let finalRecommendation: "strong_recommend_hr" | "recommend_hr" | "reconsider_hr" | "reject_hr" = "reconsider_hr";
+    if (finalScore >= 85) finalRecommendation = "strong_recommend_hr";
+    else if (finalScore >= 70) finalRecommendation = "recommend_hr";
+    else if (finalScore >= 50) finalRecommendation = "reconsider_hr";
+    else finalRecommendation = "reject_hr";
+
+    const finalSynthesis = `Synthesized Analysis for ${application.fullName}: Candidate achieved a pre-interview CV score of ${cvScore}/100 and a live technical assessment score of ${techScore}/100. Overall AI Composite Rating is ${finalScore}/100. ${
+      finalRecommendation === "strong_recommend_hr"
+        ? "Top Tier Candidate — Exceptional technical proficiency & background match. Strongly recommended to advance immediately to final HR culture-fit interview."
+        : finalRecommendation === "recommend_hr"
+        ? "Qualified Candidate — Meets core technical requirements and resume credentials. Recommended for HR interview stage."
+        : finalRecommendation === "reconsider_hr"
+        ? "Borderline Performance — Review detailed scorecard & proctoring log before scheduling HR round."
+        : "Unfavorable Rating — Technical code score or CV fit fell below threshold. Progression to HR is not recommended."
+    }`;
+
+    const newStatus = args.status ?? (finalRecommendation === "strong_recommend_hr" || finalRecommendation === "recommend_hr" ? "hr_shortlisted" : application.status);
+
+    await ctx.db.patch(args.id, {
+      cvScore,
+      technicalScore: techScore,
+      finalScore,
+      finalRecommendation,
+      finalSynthesis,
+      status: newStatus,
+      updatedAt: Date.now(),
+    });
+
+    return { finalScore, finalRecommendation, finalSynthesis, status: newStatus };
+  },
+});
+
 export const createAutoInterviewForTargetApplication = mutation({
   args: {
     id: v.id("applications"),
@@ -451,7 +514,9 @@ export const saveAnalysisResult = internalMutation({
     });
 
     await ctx.db.patch(args.applicationId, {
+      cvScore: args.score,
       aiScore: args.score,
+      finalScore: args.score,
       aiRecommendation: args.recommendation,
       aiSummary: args.decisionReason,
       aiAnalyzedAt: now,

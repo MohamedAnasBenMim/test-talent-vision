@@ -40,6 +40,18 @@ export default defineSchema({
     cvFileName: v.string(),
     cvFileSize: v.number(),
     cvFileType: v.string(),
+    cvScore: v.optional(v.number()),
+    technicalScore: v.optional(v.number()),
+    finalScore: v.optional(v.number()),
+    finalRecommendation: v.optional(
+      v.union(
+        v.literal("strong_recommend_hr"),
+        v.literal("recommend_hr"),
+        v.literal("reconsider_hr"),
+        v.literal("reject_hr")
+      )
+    ),
+    finalSynthesis: v.optional(v.string()),
     aiScore: v.optional(v.number()),
     aiRecommendation: v.optional(
       v.union(v.literal("strong_match"), v.literal("maybe"), v.literal("weak_match"))
@@ -54,6 +66,8 @@ export default defineSchema({
       v.literal("technical_invited"),
       v.literal("technical_passed"),
       v.literal("technical_failed"),
+      v.literal("hr_shortlisted"),
+      v.literal("hr_rejected"),
       v.literal("saved_to_talent_pool")
     ),
     createdAt: v.number(),

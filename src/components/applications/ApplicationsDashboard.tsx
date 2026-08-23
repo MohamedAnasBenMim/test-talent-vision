@@ -1,43 +1,58 @@
 "use client";
 
-import { useQuery } from "convex/react";
+import { useQuery, useMutation } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import LoaderUI from "@/components/LoaderUI";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   APPLICATION_STATUS_LABELS,
   AI_RECOMMENDATION_LABELS,
+  FINAL_HR_RECOMMENDATION_LABELS,
   ApplicationStatus,
   AiRecommendation,
+  FinalHrRecommendation,
   getAiRecommendationVariant,
   getApplicationStatusVariant,
+  getFinalHrRecommendationVariant,
 } from "@/components/applications/status";
 import { format } from "date-fns";
 import {
+  ArrowUpDownIcon,
   BriefcaseIcon,
   ChevronRightIcon,
   FileTextIcon,
-  MailIcon,
-  PhoneIcon,
   SearchIcon,
   SparklesIcon,
-  UserIcon,
+  TrophyIcon,
+  UserCheckIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useState, useMemo } from "react";
+import toast from "react-hot-toast";
+
+type SortOption = "finalScore" | "techScore" | "cvScore" | "date";
 
 export default function ApplicationsDashboard() {
   const applications = useQuery(api.applications.getApplications);
+  const updateCandidateFinalEvaluation = useMutation(api.applications.updateCandidateFinalEvaluation);
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeFilter, setActiveFilter] = useState<"all" | "high" | "review" | "passed">("all");
+  const [activeFilter, setActiveFilter] = useState<"all" | "hr_shortlist" | "tech_passed" | "high_cv">("all");
+  const [sortBy, setSortBy] = useState<SortOption>("finalScore");
 
   const filteredApplications = useMemo(() => {
     if (!applications) return [];
 
-    return applications.filter((app) => {
+    const filtered = applications.filter((app) => {
       // Search term filter
       const matchesSearch =
         !searchTerm.trim() ||
@@ -48,13 +63,54 @@ export default function ApplicationsDashboard() {
       if (!matchesSearch) return false;
 
       // Status tab filter
-      if (activeFilter === "high") return (app.aiScore ?? 0) >= 80;
-      if (activeFilter === "review") return app.status === "cv_review_required";
-      if (activeFilter === "passed") return app.status === "technical_passed";
+      if (activeFilter === "hr_shortlist") {
+        return (
+          app.status === "hr_shortlisted" ||
+          app.finalRecommendation === "strong_recommend_hr" ||
+          app.finalRecommendation === "recommend_hr"
+        );
+      }
+      if (activeFilter === "tech_passed") return app.status === "technical_passed";
+      if (activeFilter === "high_cv") return (app.cvScore ?? app.aiScore ?? 0) >= 80;
 
       return true;
     });
-  }, [applications, searchTerm, activeFilter]);
+
+    // Sorting
+    return [...filtered].sort((a, b) => {
+      if (sortBy === "finalScore") {
+        const scoreA = a.finalScore ?? a.cvScore ?? a.aiScore ?? 0;
+        const scoreB = b.finalScore ?? b.cvScore ?? b.aiScore ?? 0;
+        return scoreB - scoreA;
+      }
+      if (sortBy === "techScore") {
+        const techA = a.technicalScore ?? 0;
+        const techB = b.technicalScore ?? 0;
+        return techB - techA;
+      }
+      if (sortBy === "cvScore") {
+        const cvA = a.cvScore ?? a.aiScore ?? 0;
+        const cvB = b.cvScore ?? b.aiScore ?? 0;
+        return cvB - cvA;
+      }
+      if (sortBy === "date") {
+        return b.createdAt - a.createdAt;
+      }
+      return 0;
+    });
+  }, [applications, searchTerm, activeFilter, sortBy]);
+
+  const handleQuickShortlist = async (appId: string) => {
+    try {
+      await updateCandidateFinalEvaluation({
+        id: appId as any,
+        status: "hr_shortlisted",
+      });
+      toast.success("Candidate shortlisted for HR Interview!");
+    } catch {
+      toast.error("Failed to shortlist candidate");
+    }
+  };
 
   if (applications === undefined) return <LoaderUI />;
 
@@ -63,11 +119,11 @@ export default function ApplicationsDashboard() {
       {/* Page Header */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
-            Candidates
+          <h1 className="text-3xl font-extrabold tracking-tight text-foreground flex items-center gap-2">
+            Super Recruiter Candidates Leaderboard <TrophyIcon className="size-6 text-primary" />
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Review inbound CV submissions, AI screening scores, and schedule candidate technical interviews.
+            Multi-stage candidate ranking with pre-interview CV scores, technical assessment scores, and AI HR recommendations.
           </p>
         </div>
         <Button asChild variant="outline">
@@ -77,8 +133,8 @@ export default function ApplicationsDashboard() {
         </Button>
       </div>
 
-      {/* Search & Filter Controls */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+      {/* Search, Filter & Sorting Controls */}
+      <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
         <div className="relative flex-1 max-w-md">
           <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
@@ -88,35 +144,61 @@ export default function ApplicationsDashboard() {
             className="pl-9 bg-card"
           />
         </div>
-        <div className="flex items-center gap-2">
-          <Button
-            size="sm"
-            variant={activeFilter === "all" ? "default" : "ghost"}
-            onClick={() => setActiveFilter("all")}
-          >
-            All ({applications.length})
-          </Button>
-          <Button
-            size="sm"
-            variant={activeFilter === "high" ? "default" : "ghost"}
-            onClick={() => setActiveFilter("high")}
-          >
-            High Match (&gt;80%)
-          </Button>
-          <Button
-            size="sm"
-            variant={activeFilter === "review" ? "default" : "ghost"}
-            onClick={() => setActiveFilter("review")}
-          >
-            In Review
-          </Button>
-          <Button
-            size="sm"
-            variant={activeFilter === "passed" ? "default" : "ghost"}
-            onClick={() => setActiveFilter("passed")}
-          >
-            Passed
-          </Button>
+
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Sorting Dropdown */}
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-semibold text-muted-foreground flex items-center gap-1">
+              <ArrowUpDownIcon className="size-3.5" /> Sort:
+            </span>
+            <Select value={sortBy} onValueChange={(val) => setSortBy(val as SortOption)}>
+              <SelectTrigger className="w-[200px] h-9 text-xs bg-card">
+                <SelectValue placeholder="Sort by" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="finalScore">⭐ Final AI Composite Score</SelectItem>
+                <SelectItem value="techScore">💻 Technical Assessment Score</SelectItem>
+                <SelectItem value="cvScore">📄 CV Screening Score</SelectItem>
+                <SelectItem value="date">📅 Applied Date</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+
+          {/* Filter Buttons */}
+          <div className="flex flex-wrap items-center gap-1.5 bg-secondary/40 p-1 rounded-lg">
+            <Button
+              size="sm"
+              className="h-7 text-xs"
+              variant={activeFilter === "all" ? "default" : "ghost"}
+              onClick={() => setActiveFilter("all")}
+            >
+              All ({applications.length})
+            </Button>
+            <Button
+              size="sm"
+              className="h-7 text-xs gap-1"
+              variant={activeFilter === "hr_shortlist" ? "default" : "ghost"}
+              onClick={() => setActiveFilter("hr_shortlist")}
+            >
+              ⭐ HR Shortlist
+            </Button>
+            <Button
+              size="sm"
+              className="h-7 text-xs"
+              variant={activeFilter === "tech_passed" ? "default" : "ghost"}
+              onClick={() => setActiveFilter("tech_passed")}
+            >
+              💻 Tech Passed
+            </Button>
+            <Button
+              size="sm"
+              className="h-7 text-xs"
+              variant={activeFilter === "high_cv" ? "default" : "ghost"}
+              onClick={() => setActiveFilter("high_cv")}
+            >
+              📄 High CV Match
+            </Button>
+          </div>
         </div>
       </div>
 
@@ -133,24 +215,28 @@ export default function ApplicationsDashboard() {
               <table className="w-full text-left text-sm">
                 <thead className="bg-secondary/40 text-xs uppercase text-muted-foreground font-semibold border-b border-border">
                   <tr>
-                    <th className="px-6 py-3.5">Candidate</th>
-                    <th className="px-6 py-3.5">Position</th>
-                    <th className="px-6 py-3.5">AI Score</th>
-                    <th className="px-6 py-3.5">Recommendation</th>
-                    <th className="px-6 py-3.5">Status</th>
-                    <th className="px-6 py-3.5">Applied Date</th>
-                    <th className="px-6 py-3.5 text-right">Action</th>
+                    <th className="px-5 py-3.5">Candidate</th>
+                    <th className="px-5 py-3.5">Position</th>
+                    <th className="px-4 py-3.5 text-center">📄 CV Score</th>
+                    <th className="px-4 py-3.5 text-center">💻 Tech Score</th>
+                    <th className="px-4 py-3.5 text-center">⭐ Final Score</th>
+                    <th className="px-5 py-3.5">AI HR Recommendation</th>
+                    <th className="px-5 py-3.5">Status</th>
+                    <th className="px-5 py-3.5 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {filteredApplications.map((app) => {
                     const status = app.status as ApplicationStatus;
-                    const recommendation = app.aiRecommendation as AiRecommendation | undefined;
+                    const cvScore = app.cvScore ?? app.aiScore;
+                    const techScore = app.technicalScore;
+                    const finalScore = app.finalScore ?? (cvScore && techScore ? Math.round(cvScore * 0.4 + techScore * 0.6) : cvScore);
+                    const hrRec = app.finalRecommendation as FinalHrRecommendation | undefined;
 
                     return (
                       <tr key={app._id} className="hover:bg-secondary/20 transition-colors">
                         {/* Candidate Info */}
-                        <td className="px-6 py-4">
+                        <td className="px-5 py-4">
                           <div className="flex items-center gap-3">
                             <div className="grid size-9 place-items-center rounded-full bg-primary/10 text-primary font-bold text-xs shrink-0">
                               {app.fullName.substring(0, 2).toUpperCase()}
@@ -163,55 +249,80 @@ export default function ApplicationsDashboard() {
                         </td>
 
                         {/* Position */}
-                        <td className="px-6 py-4 font-semibold text-foreground">
+                        <td className="px-5 py-4 font-semibold text-foreground">
                           <span className="inline-flex items-center gap-1.5 rounded-lg bg-secondary px-2.5 py-1 text-xs font-medium">
                             <BriefcaseIcon className="size-3 text-primary" />
                             {app.position}
                           </span>
                         </td>
 
-                        {/* AI Score */}
-                        <td className="px-6 py-4">
-                          {typeof app.aiScore === "number" ? (
-                            <div className="flex items-center gap-2">
-                              <span className="font-extrabold text-base">{app.aiScore}</span>
-                              <span className="text-xs text-muted-foreground">/100</span>
-                            </div>
+                        {/* CV Score */}
+                        <td className="px-4 py-4 text-center">
+                          {typeof cvScore === "number" ? (
+                            <span className="font-bold text-foreground text-sm">{cvScore} <span className="text-[10px] text-muted-foreground font-normal">/100</span></span>
                           ) : (
-                            <span className="text-xs text-muted-foreground italic">Analyzing...</span>
+                            <span className="text-xs text-muted-foreground italic">Pending</span>
                           )}
                         </td>
 
-                        {/* Recommendation */}
-                        <td className="px-6 py-4">
-                          {recommendation ? (
-                            <Badge variant={getAiRecommendationVariant(recommendation)}>
-                              {AI_RECOMMENDATION_LABELS[recommendation]}
+                        {/* Tech Score */}
+                        <td className="px-4 py-4 text-center">
+                          {typeof techScore === "number" ? (
+                            <span className="font-bold text-primary text-sm">{techScore} <span className="text-[10px] text-muted-foreground font-normal">/100</span></span>
+                          ) : (
+                            <span className="text-xs text-muted-foreground italic">Not Taken</span>
+                          )}
+                        </td>
+
+                        {/* Final AI Score */}
+                        <td className="px-4 py-4 text-center">
+                          {typeof finalScore === "number" ? (
+                            <div className="inline-flex items-center justify-center rounded-full bg-primary/15 px-3 py-1 text-primary font-black text-sm border border-primary/30">
+                              {finalScore}
+                            </div>
+                          ) : (
+                            <span className="text-xs text-muted-foreground">--</span>
+                          )}
+                        </td>
+
+                        {/* HR Recommendation */}
+                        <td className="px-5 py-4">
+                          {hrRec ? (
+                            <Badge variant={getFinalHrRecommendationVariant(hrRec)}>
+                              {FINAL_HR_RECOMMENDATION_LABELS[hrRec]}
                             </Badge>
                           ) : (
-                            <span className="text-xs text-muted-foreground">Pending</span>
+                            <span className="text-xs text-muted-foreground">Pending Interview</span>
                           )}
                         </td>
 
                         {/* Status */}
-                        <td className="px-6 py-4">
+                        <td className="px-5 py-4">
                           <Badge variant={getApplicationStatusVariant(status)}>
                             {APPLICATION_STATUS_LABELS[status]}
                           </Badge>
                         </td>
 
-                        {/* Applied Date */}
-                        <td className="px-6 py-4 text-xs text-muted-foreground whitespace-nowrap">
-                          {format(new Date(app.createdAt), "MMM d, yyyy")}
-                        </td>
-
                         {/* Action */}
-                        <td className="px-6 py-4 text-right">
-                          <Button asChild size="sm">
-                            <Link href={`/dashboard/applications/${app._id}`}>
-                              Review <ChevronRightIcon className="size-3.5" />
-                            </Link>
-                          </Button>
+                        <td className="px-5 py-4 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            {app.status !== "hr_shortlisted" && (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 text-xs gap-1 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
+                                onClick={() => handleQuickShortlist(app._id)}
+                                title="Shortlist for HR Interview"
+                              >
+                                <UserCheckIcon className="size-3.5" /> Shortlist
+                              </Button>
+                            )}
+                            <Button asChild size="sm" className="h-8 text-xs">
+                              <Link href={`/dashboard/applications/${app._id}`}>
+                                Review <ChevronRightIcon className="size-3.5" />
+                              </Link>
+                            </Button>
+                          </div>
                         </td>
                       </tr>
                     );

@@ -127,6 +127,11 @@ export default function Home() {
               <p className="mx-auto max-w-md text-sm leading-relaxed text-muted-foreground">
                 Thank you for completing your technical interview for <strong className="text-foreground">{completedInterview.title}</strong>. Your code submission and proctoring session recording have been securely sent to the recruiter team for review.
               </p>
+              <div className="pt-1">
+                <span className="inline-flex items-center gap-1.5 text-xs font-semibold text-emerald-700 dark:text-emerald-300 bg-emerald-500/15 py-1.5 px-3 rounded-full border border-emerald-500/30">
+                  ✨ You can safely close this tab now
+                </span>
+              </div>
             </div>
             <div className="pt-2 border-t border-emerald-500/20 text-xs text-muted-foreground">
               Status: <span className="font-semibold text-emerald-600 dark:text-emerald-400">Under Recruiter Evaluation</span>
@@ -153,7 +158,7 @@ export default function Home() {
   }
 
   return (
-    <div className="container mx-auto max-w-7xl p-6 space-y-8">
+    <div className="w-full p-4 sm:p-6 lg:p-8 space-y-5">
       {/* Header Greeting Section */}
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>

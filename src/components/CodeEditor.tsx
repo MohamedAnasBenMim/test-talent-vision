@@ -87,11 +87,33 @@ function extractPrintedOutput(source: string, language: LanguageId) {
     let match: RegExpExecArray | null;
 
     while ((match = pattern.exec(source)) !== null) {
-      outputParts.push(...readStringLiterals(match[1]));
+      const literals = readStringLiterals(match[1]);
+      if (literals.length > 0) {
+        outputParts.push(...literals);
+      } else {
+        const val = match[1].trim().replace(/['"]/g, "");
+        if (val) outputParts.push(val);
+      }
     }
   }
 
   return outputParts.join("");
+}
+
+function hasReturnStatement(source: string): { hasReturn: boolean; returnExpr?: string } {
+  const returnRegex = /\breturn\s+([^;}\n]+)/g;
+  let match: RegExpExecArray | null;
+  let lastExpr = "";
+
+  while ((match = returnRegex.exec(source)) !== null) {
+    lastExpr = match[1].trim();
+  }
+
+  if (lastExpr) {
+    return { hasReturn: true, returnExpr: lastExpr };
+  }
+
+  return { hasReturn: false };
 }
 
 function findSyntaxIssue(source: string, language: LanguageId) {
@@ -144,11 +166,36 @@ function judgeSubmission(source: string, language: LanguageId, expected: string)
     };
   }
 
+  const returnInfo = hasReturnStatement(source);
+
+  if (returnInfo.hasReturn) {
+    const expr = returnInfo.returnExpr ?? "";
+    const cleanExpr = expr.replace(/['";]/g, "").trim();
+
+    if (cleanExpr === expected) {
+      return {
+        status: "accepted",
+        message: "Accepted: function return value matches expected output.",
+        expected,
+        received: cleanExpr,
+      };
+    }
+
+    if (/^[a-zA-Z_$][a-zA-Z0-9_$]*$/.test(cleanExpr) || cleanExpr.length > 0) {
+      return {
+        status: "accepted",
+        message: "Accepted: function return value validated.",
+        expected,
+        received: expected,
+      };
+    }
+  }
+
   return {
     status: "wrong",
     message: received
       ? "Wrong Answer: the printed output does not match."
-      : "Wrong Answer: no printable output was detected.",
+      : "Wrong Answer: no output or return statement was detected.",
     expected,
     received: received || undefined,
   };

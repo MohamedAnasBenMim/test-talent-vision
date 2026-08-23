@@ -32,10 +32,13 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   APPLICATION_STATUS_LABELS,
   AI_RECOMMENDATION_LABELS,
+  FINAL_HR_RECOMMENDATION_LABELS,
   ApplicationStatus,
   AiRecommendation,
+  FinalHrRecommendation,
   getAiRecommendationVariant,
   getApplicationStatusVariant,
+  getFinalHrRecommendationVariant,
 } from "@/components/applications/status";
 import { useUser } from "@clerk/nextjs";
 import { format } from "date-fns";
@@ -57,6 +60,9 @@ import {
   RefreshCcwIcon,
   SendIcon,
   ShieldCheckIcon,
+  SparklesIcon,
+  TrophyIcon,
+  UserCheckIcon,
   UserIcon,
   VideoIcon,
   XCircleIcon,
@@ -138,12 +144,49 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
   );
   const rerunApplicationAnalysis = useAction(api.applicationAnalysis.rerunApplicationAnalysis);
   const updateApplicationStatus = useMutation(api.applications.updateApplicationStatus);
+  const updateCandidateFinalEvaluation = useMutation(api.applications.updateCandidateFinalEvaluation);
   const createInterview = useMutation(api.interviews.createInterview);
   const { user } = useUser();
   const [isRejecting, setIsRejecting] = useState(false);
   const [isRerunningAnalysis, setIsRerunningAnalysis] = useState(false);
+  const [isEvaluatingFinal, setIsEvaluatingFinal] = useState(false);
   const [isScheduleOpen, setIsScheduleOpen] = useState(false);
   const [isScheduling, setIsScheduling] = useState(false);
+
+  const handleCalculateFinalEvaluation = async () => {
+    if (!application) return;
+    setIsEvaluatingFinal(true);
+    try {
+      const techScore = assessmentReport?.attempt?.score ?? application.technicalScore ?? 85;
+      await updateCandidateFinalEvaluation({
+        id: application._id,
+        technicalScore: techScore,
+      });
+      toast.success("Final AI Evaluation & HR Recommendation generated!");
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Failed to calculate final evaluation");
+    } finally {
+      setIsEvaluatingFinal(false);
+    }
+  };
+
+  const handleShortlistForHR = async () => {
+    if (!application) return;
+    setIsEvaluatingFinal(true);
+    try {
+      await updateCandidateFinalEvaluation({
+        id: application._id,
+        status: "hr_shortlisted",
+      });
+      toast.success("Candidate successfully shortlisted for HR Interview!");
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Failed to shortlist candidate");
+    } finally {
+      setIsEvaluatingFinal(false);
+    }
+  };
   const [scheduleForm, setScheduleForm] = useState({
     title: "",
     description: "",
@@ -385,6 +428,105 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
         </section>
 
         <aside className="space-y-6">
+          {/* Executive Final AI Synthesis & HR Recommendation Card */}
+          <Card className="border-2 border-primary/30 bg-gradient-to-br from-card via-card to-primary/5 shadow-md">
+            <CardHeader className="pb-3">
+              <div className="flex items-center justify-between gap-3">
+                <div className="flex items-center gap-2">
+                  <div className="flex size-8 items-center justify-center rounded-lg bg-primary/20 text-primary">
+                    <TrophyIcon className="size-4" />
+                  </div>
+                  <div>
+                    <CardTitle className="text-base font-bold">Final AI Synthesis & HR Recommendation</CardTitle>
+                    <p className="text-xs text-muted-foreground">Integrated CV + Technical Assessment Evaluation</p>
+                  </div>
+                </div>
+                {application.finalRecommendation && (
+                  <Badge variant={getFinalHrRecommendationVariant(application.finalRecommendation as FinalHrRecommendation)}>
+                    {FINAL_HR_RECOMMENDATION_LABELS[application.finalRecommendation as FinalHrRecommendation]}
+                  </Badge>
+                )}
+              </div>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/* Dual-Score Comparison Grid */}
+              <div className="grid grid-cols-3 gap-2 rounded-xl border border-primary/20 bg-background/60 p-3 text-center">
+                <div className="space-y-0.5">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    📄 CV Match
+                  </p>
+                  <p className="text-lg font-bold text-foreground">
+                    {application.cvScore ?? application.aiScore ?? "--"}
+                    <span className="text-[10px] text-muted-foreground font-normal">/100</span>
+                  </p>
+                  <p className="text-[9px] text-muted-foreground">Pre-interview (40%)</p>
+                </div>
+
+                <div className="space-y-0.5 border-x border-border/50 px-1">
+                  <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">
+                    💻 Tech Score
+                  </p>
+                  <p className="text-lg font-bold text-primary">
+                    {application.technicalScore ?? assessmentReport?.attempt?.score ?? "--"}
+                    <span className="text-[10px] text-muted-foreground font-normal">/100</span>
+                  </p>
+                  <p className="text-[9px] text-muted-foreground">Coding & QCM (60%)</p>
+                </div>
+
+                <div className="space-y-0.5">
+                  <p className="text-[10px] font-semibold text-primary uppercase tracking-wider">
+                    ⭐ Final Score
+                  </p>
+                  <p className="text-xl font-black text-primary">
+                    {application.finalScore ?? "--"}
+                    <span className="text-[10px] text-muted-foreground font-normal">/100</span>
+                  </p>
+                  <p className="text-[9px] text-primary/80 font-medium">Composite</p>
+                </div>
+              </div>
+
+              {/* AI Synthesis Executive Rationale */}
+              {application.finalSynthesis ? (
+                <div className="rounded-xl border border-border/60 bg-card p-3 space-y-1">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-primary">
+                    <SparklesIcon className="size-3.5" /> AI Knowledge Synthesis
+                  </div>
+                  <p className="text-xs leading-relaxed text-muted-foreground">
+                    {application.finalSynthesis}
+                  </p>
+                </div>
+              ) : (
+                <p className="text-xs text-muted-foreground italic">
+                  Click below to synthesize pre-interview CV score & live technical interview performance into a final HR recommendation.
+                </p>
+              )}
+
+              {/* Action Buttons */}
+              <div className="flex flex-col gap-2 pt-1">
+                <Button
+                  onClick={handleCalculateFinalEvaluation}
+                  disabled={isEvaluatingFinal}
+                  variant="outline"
+                  size="sm"
+                  className="w-full text-xs h-8 gap-1.5 border-primary/30"
+                >
+                  {isEvaluatingFinal ? <Loader2Icon className="size-3.5 animate-spin" /> : <SparklesIcon className="size-3.5 text-primary" />}
+                  {application.finalScore ? "Recalculate Final AI Score" : "Generate Final AI Synthesis"}
+                </Button>
+
+                <Button
+                  onClick={handleShortlistForHR}
+                  disabled={isEvaluatingFinal || application.status === "hr_shortlisted"}
+                  size="sm"
+                  className="w-full text-xs h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                >
+                  <UserCheckIcon className="size-3.5" />
+                  {application.status === "hr_shortlisted" ? "Candidate Shortlisted for HR Round" : "Shortlist for HR Interview"}
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+
           <Card>
             <CardHeader>
               <div className="flex items-center justify-between gap-3">

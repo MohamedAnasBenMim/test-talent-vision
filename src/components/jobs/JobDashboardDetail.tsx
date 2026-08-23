@@ -12,9 +12,12 @@ import {
   AI_RECOMMENDATION_LABELS,
   AiRecommendation,
   getAiRecommendationVariant,
+  FINAL_HR_RECOMMENDATION_LABELS,
+  FinalHrRecommendation,
+  getFinalHrRecommendationVariant,
 } from "@/components/applications/status";
 import { format } from "date-fns";
-import { ArrowLeftIcon, CopyIcon, ExternalLinkIcon, MailIcon, PhoneIcon, Trash2Icon, Loader2Icon } from "lucide-react";
+import { ArrowLeftIcon, CopyIcon, ExternalLinkIcon, MailIcon, PhoneIcon, Trash2Icon, Loader2Icon, EyeIcon } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import toast from "react-hot-toast";
@@ -146,8 +149,11 @@ export default function JobDashboardDetail({ jobId }: { jobId: string }) {
                 </div>
               ) : (
                 applications.map((application) => {
-                  const recommendation =
-                    application.aiRecommendation as AiRecommendation | undefined;
+                  const recommendation = application.aiRecommendation as AiRecommendation | undefined;
+                  const hrRec = application.finalRecommendation as FinalHrRecommendation | undefined;
+                  const cvScore = application.cvScore ?? application.aiScore;
+                  const techScore = application.technicalScore;
+                  const finalScore = application.finalScore ?? (cvScore && techScore ? Math.round(cvScore * 0.4 + techScore * 0.6) : cvScore);
 
                   return (
                     <div
@@ -173,18 +179,46 @@ export default function JobDashboardDetail({ jobId }: { jobId: string }) {
                             </span>
                           </div>
                         </div>
-                        <div className="text-right">
-                          <p className="text-3xl font-bold">{application.aiScore ?? "--"}</p>
-                          <p className="text-xs text-muted-foreground">AI score</p>
+
+                        {/* Dual & Final Scores */}
+                        <div className="flex items-center gap-4">
+                          <div className="flex items-center gap-3 bg-secondary/50 px-3 py-1.5 rounded-lg border border-border/50 text-center">
+                            <div>
+                              <p className="text-[10px] text-muted-foreground uppercase font-semibold">📄 CV</p>
+                              <p className="text-sm font-bold">{cvScore ?? "--"}</p>
+                            </div>
+                            <div className="border-l border-border/60 pl-3">
+                              <p className="text-[10px] text-muted-foreground uppercase font-semibold">💻 Tech</p>
+                              <p className="text-sm font-bold text-primary">{techScore ?? "--"}</p>
+                            </div>
+                            <div className="border-l border-border/60 pl-3">
+                              <p className="text-[10px] text-primary uppercase font-semibold">⭐ Final</p>
+                              <p className="text-base font-black text-primary">{finalScore ?? "--"}</p>
+                            </div>
+                          </div>
+
+                          <Button asChild variant="outline" size="sm" className="h-8 text-xs gap-1.5 border-primary/30 hover:bg-primary/10">
+                            <Link href={`/dashboard/applications/${application._id}`}>
+                              <EyeIcon className="size-3.5 text-primary" />
+                              View Details
+                            </Link>
+                          </Button>
                         </div>
                       </div>
-                      <div className="mt-3 flex flex-wrap items-center gap-2">
-                        <Badge variant="outline">{application.status}</Badge>
-                        {recommendation && (
-                          <Badge variant={getAiRecommendationVariant(recommendation)}>
-                            {AI_RECOMMENDATION_LABELS[recommendation]}
-                          </Badge>
-                        )}
+
+                      <div className="mt-3 flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-3">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline">{application.status}</Badge>
+                          {hrRec ? (
+                            <Badge variant={getFinalHrRecommendationVariant(hrRec)}>
+                              {FINAL_HR_RECOMMENDATION_LABELS[hrRec]}
+                            </Badge>
+                          ) : recommendation ? (
+                            <Badge variant={getAiRecommendationVariant(recommendation)}>
+                              {AI_RECOMMENDATION_LABELS[recommendation]}
+                            </Badge>
+                          ) : null}
+                        </div>
                         <span className="text-xs text-muted-foreground">
                           {format(new Date(application.createdAt), "MMM d, yyyy · h:mm a")}
                         </span>
