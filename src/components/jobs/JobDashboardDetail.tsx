@@ -78,7 +78,7 @@ export default function JobDashboardDetail({ jobId }: { jobId: string }) {
         <Button asChild variant="ghost" size="sm" className="h-8 gap-1 text-xs">
           <Link href="/dashboard/jobs">
             <ArrowLeftIcon className="size-3.5" />
-            Back to Positions
+            Back to Jobs
           </Link>
         </Button>
         <div className="flex flex-wrap gap-2">

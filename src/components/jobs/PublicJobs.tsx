@@ -20,7 +20,7 @@ export default function PublicJobs() {
         <p className="text-xs font-semibold uppercase tracking-[0.24em] text-primary">
           BECARTH.AI Careers
         </p>
-        <h1 className="mt-3 text-3xl font-bold tracking-tight">Open Positions</h1>
+        <h1 className="mt-3 text-3xl font-bold tracking-tight">Open Jobs</h1>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-muted-foreground">
           Apply to a specific role so your CV can be reviewed against the right job description.
         </p>

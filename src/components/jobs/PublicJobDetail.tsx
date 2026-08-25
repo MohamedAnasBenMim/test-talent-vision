@@ -38,7 +38,7 @@ export default function PublicJobDetail({ jobId }: { jobId: string }) {
               This job position may be closed, unpublished, or unavailable.
             </p>
             <Button asChild className="mt-6">
-              <Link href="/jobs">View Open Positions</Link>
+              <Link href="/jobs">View Open Jobs</Link>
             </Button>
           </CardContent>
         </Card>
@@ -53,7 +53,7 @@ export default function PublicJobDetail({ jobId }: { jobId: string }) {
         <Button asChild variant="ghost" className="gap-2">
           <Link href="/jobs">
             <ArrowLeftIcon className="size-4" />
-            All Positions
+            All Jobs
           </Link>
         </Button>
       </div>

@@ -21,6 +21,7 @@ import {
   PlusIcon,
   TrendingUpIcon,
   ActivityIcon,
+  UserCheckIcon,
 } from "lucide-react";
 import { getMeetingStatus } from "@/lib/utils";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -160,15 +161,7 @@ export default function Home() {
   return (
     <div className="w-full p-4 sm:p-6 lg:p-8 space-y-5">
       {/* Header Greeting Section */}
-      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-        <div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
-            Hi there! 👋
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Here is your recruitment activity overview and hiring pipeline performance.
-          </p>
-        </div>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-end">
         <div className="flex items-center gap-3">
           <Button asChild variant="outline">
             <Link href="/dashboard/applications">
@@ -192,14 +185,14 @@ export default function Home() {
           <CardContent className="p-5 flex items-center justify-between">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wider text-muted-foreground">
-                Active Positions
+                Active Jobs
               </p>
               <p className="mt-2 text-3xl font-extrabold text-foreground">{totalJobsCount}</p>
               <Link
                 href="/dashboard/jobs"
                 className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-primary hover:underline"
               >
-                View positions <ChevronRightIcon className="size-3" />
+                View jobs <ChevronRightIcon className="size-3" />
               </Link>
             </div>
             <div className="grid size-12 place-items-center rounded-2xl bg-primary/10 text-primary">
@@ -272,18 +265,15 @@ export default function Home() {
         </Card>
       </div>
 
-      {/* Position Health Scorecard */}
+      {/* Jobs Scorecard */}
       <Card>
         <CardHeader className="flex flex-row items-center justify-between py-4">
           <div>
-            <CardTitle className="text-lg font-bold">Position Health Scorecard</CardTitle>
-            <p className="text-xs text-muted-foreground mt-0.5">
-              Live status and candidate match ratings across open requisitions.
-            </p>
+            <CardTitle className="text-lg font-bold">Jobs</CardTitle>
           </div>
           <Button asChild variant="ghost" size="sm">
             <Link href="/dashboard/jobs">
-              View All Positions <ArrowUpRightIcon className="size-4 ml-1" />
+              View All Jobs <ArrowUpRightIcon className="size-4 ml-1" />
             </Link>
           </Button>
         </CardHeader>
@@ -360,51 +350,85 @@ export default function Home() {
         </CardContent>
       </Card>
 
-      {/* Hiring Workbench & Quick Actions */}
+      {/* Pre-selected HR Candidates Action Hub */}
       <div className="grid gap-6 lg:grid-cols-3">
-        {/* Pipeline Summary Card */}
         <Card className="lg:col-span-2">
-          <CardHeader className="py-4">
-            <CardTitle className="text-lg font-bold flex items-center gap-2">
-              <ActivityIcon className="size-5 text-primary" />
-              Hiring Workbench Pipeline
-            </CardTitle>
+          <CardHeader className="py-4 flex flex-row items-center justify-between border-b border-border/60">
+            <div>
+              <CardTitle className="text-lg font-bold flex items-center gap-2">
+                <UserCheckIcon className="size-5 text-emerald-500" />
+                Pre-selected HR Candidates Hub
+              </CardTitle>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Candidates pre-selected for final HR interview round after AI evaluation
+              </p>
+            </div>
+            <Button asChild variant="outline" size="sm" className="text-xs gap-1">
+              <Link href="/dashboard/applications">
+                View Leaderboard <ArrowUpRightIcon className="size-3.5" />
+              </Link>
+            </Button>
           </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-4 gap-3">
-              <div className="rounded-xl border border-border bg-secondary/30 p-4 text-center">
-                <p className="text-xs font-medium text-muted-foreground">Inbound</p>
-                <p className="mt-1 text-2xl font-extrabold text-foreground">{pipelineStats.applied}</p>
-                <Badge variant="outline" className="mt-2 text-[10px]">Applied</Badge>
+          <CardContent className="p-5 space-y-4">
+            {applications?.filter(
+              (a) =>
+                a.status === "hr_shortlisted" ||
+                a.finalRecommendation === "strong_recommend_hr" ||
+                a.finalRecommendation === "recommend_hr"
+            ).length === 0 ? (
+              <div className="rounded-xl border border-dashed border-border p-6 text-center space-y-2 bg-secondary/20">
+                <SparklesIcon className="size-8 text-primary mx-auto opacity-70" />
+                <p className="text-sm font-semibold text-foreground">No Pre-selected HR Candidates Yet</p>
+                <p className="text-xs text-muted-foreground max-w-sm mx-auto">
+                  Candidates who complete CV screening and technical assessments will appear here for HR interview scheduling.
+                </p>
               </div>
-              <div className="rounded-xl border border-border bg-secondary/30 p-4 text-center">
-                <p className="text-xs font-medium text-muted-foreground">AI Screening</p>
-                <p className="mt-1 text-2xl font-extrabold text-foreground">{pipelineStats.screening}</p>
-                <Badge variant="default" className="mt-2 text-[10px]">Shortlisted</Badge>
+            ) : (
+              <div className="space-y-2.5">
+                {applications
+                  ?.filter(
+                    (a) =>
+                      a.status === "hr_shortlisted" ||
+                      a.finalRecommendation === "strong_recommend_hr" ||
+                      a.finalRecommendation === "recommend_hr"
+                  )
+                  .slice(0, 4)
+                  .map((app) => (
+                    <div
+                      key={app._id}
+                      className="flex items-center justify-between p-3 rounded-xl border border-border/70 bg-card hover:bg-secondary/30 transition-all"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="grid size-9 place-items-center rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 font-bold text-xs">
+                          {app.fullName.substring(0, 2).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-bold text-foreground">{app.fullName}</p>
+                            <Badge variant="success" className="text-[10px] px-1.5 py-0">
+                              Pre-selected HR
+                            </Badge>
+                          </div>
+                          <p className="text-xs text-muted-foreground">{app.position} • {app.email}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right hidden sm:block">
+                          <p className="text-xs font-bold text-emerald-600 dark:text-emerald-400">
+                            {app.finalScore ?? app.cvScore ?? 85}% Score
+                          </p>
+                          <p className="text-[10px] text-muted-foreground">CV + Tech Passed</p>
+                        </div>
+                        <Button asChild size="sm" className="h-8 text-xs gap-1">
+                          <Link href="/schedule">
+                            Invite to HR Interview
+                          </Link>
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
               </div>
-              <div className="rounded-xl border border-border bg-secondary/30 p-4 text-center">
-                <p className="text-xs font-medium text-muted-foreground">Interviewing</p>
-                <p className="mt-1 text-2xl font-extrabold text-foreground">{pipelineStats.interview}</p>
-                <Badge variant="info" className="mt-2 text-[10px]">Invited</Badge>
-              </div>
-              <div className="rounded-xl border border-border bg-secondary/30 p-4 text-center">
-                <p className="text-xs font-medium text-muted-foreground">Passed</p>
-                <p className="mt-1 text-2xl font-extrabold text-foreground">{pipelineStats.passed}</p>
-                <Badge variant="success" className="mt-2 text-[10px]">Qualified</Badge>
-              </div>
-            </div>
-
-            <div className="space-y-3">
-              <div className="flex items-center justify-between text-xs font-semibold">
-                <span className="text-muted-foreground">Funnel Conversion Rate (Inbound → Qualified)</span>
-                <span className="text-primary font-bold">64% Overall Match</span>
-              </div>
-              <div className="h-2 w-full rounded-full bg-secondary overflow-hidden flex">
-                <div className="bg-primary h-full" style={{ width: '40%' }} />
-                <div className="bg-sky-500 h-full" style={{ width: '25%' }} />
-                <div className="bg-emerald-500 h-full" style={{ width: '20%' }} />
-              </div>
-            </div>
+            )}
           </CardContent>
         </Card>
 

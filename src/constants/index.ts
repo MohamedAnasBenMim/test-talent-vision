@@ -52,8 +52,8 @@ export const QUICK_ACTIONS = [
   },
   {
     icon: Sparkles,
-    title: "AI Insights",
-    description: "Pipeline scoring & analytics",
+    title: "AI Intelligence & Policies",
+    description: "Pipeline analytics & AI scoring rules",
     href: "/dashboard/ai-insights",
     color: "emerald-500",
   },

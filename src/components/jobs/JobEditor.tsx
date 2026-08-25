@@ -32,6 +32,8 @@ import {
   CodeIcon,
   HelpCircleIcon,
   CheckIcon,
+  PencilIcon,
+  FileTextIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -53,6 +55,7 @@ export default function JobEditor({ jobId }: JobEditorProps) {
   const generateAction = useAction((api as any).jobGeneration?.generateJobDescription);
   const [isSaving, setIsSaving] = useState(false);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [showMarkdownEditor, setShowMarkdownEditor] = useState<boolean>(false);
   const [showQuestionDetails, setShowQuestionDetails] = useState(false);
   const [qcmQuestions, setQcmQuestions] = useState<any[]>([]);
   const [codingQuestion, setCodingQuestion] = useState<any>(null);
@@ -146,6 +149,7 @@ export default function JobEditor({ jobId }: JobEditorProps) {
         setCodingQuestion(result.codingQuestion);
       }
 
+      setShowMarkdownEditor(false);
       toast.success("Job description, QCM assessment & coding test generated with AI!");
     } catch (error: any) {
       console.error(error);
@@ -299,47 +303,91 @@ export default function JobEditor({ jobId }: JobEditorProps) {
               <Label htmlFor="description" className="text-sm font-bold text-foreground">
                 Full Job Description (Markdown Supported)
               </Label>
-              <span className="text-[11px] font-semibold text-primary uppercase tracking-wider hidden sm:inline-block">
-                Parallel Split Editor & Live Preview
-              </span>
+              <div className="flex items-center gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="h-7 text-xs gap-1.5 border-primary/30"
+                  onClick={() => setShowMarkdownEditor(!showMarkdownEditor)}
+                >
+                  {showMarkdownEditor ? (
+                    <>
+                      <EyeIcon className="size-3 text-primary" />
+                      Hide Code Editor (Preview Only)
+                    </>
+                  ) : (
+                    <>
+                      <PencilIcon className="size-3 text-primary" />
+                      Edit Markdown Code
+                    </>
+                  )}
+                </Button>
+                {showMarkdownEditor && (
+                  <span className="text-[11px] font-semibold text-primary uppercase tracking-wider hidden sm:inline-block">
+                    Parallel Split Editor & Live Preview
+                  </span>
+                )}
+              </div>
             </div>
 
-            <div className="grid gap-4 lg:grid-cols-2 items-stretch">
-              {/* Left Column: Markdown Input Editor */}
-              <div className="space-y-1.5 flex flex-col">
-                <div className="flex items-center justify-between text-xs text-muted-foreground px-1 font-medium">
-                  <span>Markdown Code Editor</span>
-                  <span className="text-[10px] text-muted-foreground">Type or paste below</span>
-                </div>
-                <Textarea
-                  id="description"
-                  rows={14}
-                  value={form.description}
-                  onChange={(event) => updateField("description", event.target.value)}
-                  placeholder="Write or paste your job description using Markdown..."
-                  className="font-mono text-xs leading-relaxed resize-y h-full min-h-[320px]"
-                  required
-                />
-              </div>
-
-              {/* Right Column: Parallel Live Preview */}
-              <div className="rounded-xl border border-border/80 bg-secondary/15 p-4.5 flex flex-col min-h-[320px] max-h-[550px] overflow-y-auto">
-                <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-border/60 shrink-0">
+            {!showMarkdownEditor ? (
+              /* Clean Full-Width Formatted Description Display */
+              <div className="rounded-xl border border-border/80 bg-secondary/15 p-5 min-h-[160px] max-h-[600px] overflow-y-auto space-y-3">
+                <div className="flex items-center justify-between pb-2 mb-1 border-b border-border/50">
                   <span className="text-[11px] font-extrabold uppercase tracking-wider text-primary flex items-center gap-1.5">
-                    <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
-                    Live Description Preview
+                    <FileTextIcon className="size-3.5 text-primary" />
+                    Formatted Job Description
                   </span>
-                  <span className="text-[10px] font-medium text-muted-foreground">Real-Time Sync</span>
+                  <span className="text-[10px] font-medium text-muted-foreground">Markdown Rendered</span>
                 </div>
                 {form.description ? (
                   <FormattedMarkdown content={form.description} />
                 ) : (
-                  <div className="flex flex-col items-center justify-center flex-1 text-center text-muted-foreground py-12 space-y-1">
-                    <p className="text-xs italic">Type on the left or generate with AI to view live preview...</p>
+                  <div className="py-8 text-center text-muted-foreground">
+                    <p className="text-xs italic">No job description entered yet. Click "Edit Markdown Code" or "Generate with AI" above.</p>
                   </div>
                 )}
               </div>
-            </div>
+            ) : (
+              /* Split Code Editor + Live Preview */
+              <div className="grid gap-4 lg:grid-cols-2 items-stretch">
+                {/* Left Column: Markdown Input Editor */}
+                <div className="space-y-1.5 flex flex-col">
+                  <div className="flex items-center justify-between text-xs text-muted-foreground px-1 font-medium">
+                    <span>Markdown Code Editor</span>
+                    <span className="text-[10px] text-muted-foreground">Type or paste below</span>
+                  </div>
+                  <Textarea
+                    id="description"
+                    rows={14}
+                    value={form.description}
+                    onChange={(event) => updateField("description", event.target.value)}
+                    placeholder="Write or paste your job description using Markdown..."
+                    className="font-mono text-xs leading-relaxed resize-y h-full min-h-[320px]"
+                    required
+                  />
+                </div>
+
+                {/* Right Column: Parallel Live Preview */}
+                <div className="rounded-xl border border-border/80 bg-secondary/15 p-4.5 flex flex-col min-h-[320px] max-h-[550px] overflow-y-auto">
+                  <div className="flex items-center justify-between pb-2.5 mb-2.5 border-b border-border/60 shrink-0">
+                    <span className="text-[11px] font-extrabold uppercase tracking-wider text-primary flex items-center gap-1.5">
+                      <span className="size-2 rounded-full bg-emerald-500 animate-pulse" />
+                      Live Description Preview
+                    </span>
+                    <span className="text-[10px] font-medium text-muted-foreground">Real-Time Sync</span>
+                  </div>
+                  {form.description ? (
+                    <FormattedMarkdown content={form.description} />
+                  ) : (
+                    <div className="flex flex-col items-center justify-center flex-1 text-center text-muted-foreground py-12 space-y-1">
+                      <p className="text-xs italic">Type on the left or generate with AI to view live preview...</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
 
           <div className="grid gap-4 sm:grid-cols-2">
@@ -567,7 +615,7 @@ export default function JobEditor({ jobId }: JobEditorProps) {
               ) : (
                 <CheckCircle2Icon className="size-4" />
               )}
-              {jobId ? "Save Job" : "Create Job"}
+              {jobId ? "Save Changes" : "Create Position"}
             </Button>
           </div>
         </form>

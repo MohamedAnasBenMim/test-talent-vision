@@ -68,10 +68,10 @@ export default function JobsDashboard() {
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-extrabold tracking-tight text-foreground">
-            Positions
+            Jobs
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Manage requisition profiles, set AI scoring criteria, and publish public candidate apply links.
+            Manage job postings, set AI scoring criteria, and publish public candidate apply links.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -84,7 +84,7 @@ export default function JobsDashboard() {
           <Button asChild>
             <Link href="/dashboard/jobs/new">
               <PlusIcon className="size-4" />
-              Create Position
+              Create Job
             </Link>
           </Button>
         </div>
@@ -95,7 +95,7 @@ export default function JobsDashboard() {
         <div className="relative flex-1 max-w-md">
           <SearchIcon className="absolute left-3 top-1/2 -translate-y-1/2 size-4 text-muted-foreground" />
           <Input
-            placeholder="Search positions by title, location, or type..."
+            placeholder="Search jobs by title, location, or type..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
             className="pl-9 bg-card"
@@ -119,14 +119,14 @@ export default function JobsDashboard() {
           <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
             <BriefcaseIcon className="size-7" />
           </div>
-          <h2 className="mt-4 text-xl font-bold">No Positions Found</h2>
+          <h2 className="mt-4 text-xl font-bold">No Jobs Found</h2>
           <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-            {searchTerm ? "No job matches your search criteria." : "Create your first job requisition to start sourcing candidate applications."}
+            {searchTerm ? "No job matches your search criteria." : "Create your first job posting to start sourcing candidate applications."}
           </p>
           <Button asChild className="mt-6">
             <Link href="/dashboard/jobs/new">
               <PlusIcon className="size-4" />
-              Create First Position
+              Create First Job
             </Link>
           </Button>
         </section>
