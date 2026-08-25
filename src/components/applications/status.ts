@@ -49,7 +49,7 @@ export type FinalHrRecommendation =
 export const FINAL_HR_RECOMMENDATION_LABELS: Record<FinalHrRecommendation, string> = {
   strong_recommend_hr: "⭐ Top HR Shortlist",
   recommend_hr: "✅ Recommend for HR",
-  reconsider_hr: "⚠️ Borderline Review",
+  reconsider_hr: "Review",
   reject_hr: "❌ Do Not Proceed",
 };
 

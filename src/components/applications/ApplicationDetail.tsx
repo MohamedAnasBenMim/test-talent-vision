@@ -4,7 +4,7 @@ import { FormEvent, useMemo, useState } from "react";
 import { useAction, useMutation, useQuery } from "convex/react";
 import { api } from "../../../convex/_generated/api";
 import { Doc, Id } from "../../../convex/_generated/dataModel";
-import { sendApplicationRejectionEmail } from "@/actions/application.actions";
+import { sendApplicationRejectionEmail, sendHrShortlistEmail, sendJobOfferEmail } from "@/actions/application.actions";
 import { sendInterviewInvite } from "@/actions/invite.actions";
 import { createStreamInterviewCall } from "@/actions/stream.actions";
 import LoaderUI from "@/components/LoaderUI";
@@ -64,6 +64,7 @@ import {
   TrophyIcon,
   UserCheckIcon,
   UserIcon,
+  UserXIcon,
   VideoIcon,
   XCircleIcon,
 } from "lucide-react";
@@ -157,7 +158,7 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
     if (!application) return;
     setIsEvaluatingFinal(true);
     try {
-      const techScore = assessmentReport?.attempt?.score ?? application.technicalScore ?? 85;
+      const techScore = assessmentReport?.attempt?.score ?? application.technicalScore;
       await updateCandidateFinalEvaluation({
         id: application._id,
         technicalScore: techScore,
@@ -171,6 +172,8 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
     }
   };
 
+  const [isSendingOffer, setIsSendingOffer] = useState(false);
+
   const handleShortlistForHR = async () => {
     if (!application) return;
     setIsEvaluatingFinal(true);
@@ -178,13 +181,50 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
       await updateCandidateFinalEvaluation({
         id: application._id,
         status: "hr_shortlisted",
+        finalRecommendation: "strong_recommend_hr",
       });
-      toast.success("Candidate successfully shortlisted for HR Interview!");
+      toast.success("Candidate marked as Pre-selected for HR Interview!");
     } catch (error) {
       console.error(error);
-      toast.error(error instanceof Error ? error.message : "Failed to shortlist candidate");
+      toast.error(error instanceof Error ? error.message : "Failed to pre-select candidate");
     } finally {
       setIsEvaluatingFinal(false);
+    }
+  };
+
+  const handleRemoveFromHRShortlist = async () => {
+    if (!application) return;
+    setIsEvaluatingFinal(true);
+    try {
+      await updateCandidateFinalEvaluation({
+        id: application._id,
+        status: "technical_passed",
+        finalRecommendation: "reconsider_hr",
+      });
+      toast.success("Candidate removed from HR shortlist!");
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Failed to update candidate status");
+    } finally {
+      setIsEvaluatingFinal(false);
+    }
+  };
+
+  const handleSendJobOffer = async () => {
+    if (!application) return;
+    setIsSendingOffer(true);
+    try {
+      await sendJobOfferEmail({
+        candidateEmail: application.email,
+        candidateName: application.fullName,
+        position: application.position,
+      });
+      toast.success("Official job offer email sent to candidate!");
+    } catch (error) {
+      console.error(error);
+      toast.error(error instanceof Error ? error.message : "Failed to send offer email");
+    } finally {
+      setIsSendingOffer(false);
     }
   };
   const [scheduleForm, setScheduleForm] = useState({
@@ -514,15 +554,47 @@ export default function ApplicationDetail({ applicationId }: ApplicationDetailPr
                   {application.finalScore ? "Recalculate Final AI Score" : "Generate Final AI Synthesis"}
                 </Button>
 
-                <Button
-                  onClick={handleShortlistForHR}
-                  disabled={isEvaluatingFinal || application.status === "hr_shortlisted"}
-                  size="sm"
-                  className="w-full text-xs h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
-                >
-                  <UserCheckIcon className="size-3.5" />
-                  {application.status === "hr_shortlisted" ? "Candidate Shortlisted for HR Round" : "Shortlist for HR Interview"}
-                </Button>
+                {application.status === "hr_shortlisted" || application.finalRecommendation === "strong_recommend_hr" || application.finalRecommendation === "recommend_hr" ? (
+                  <Button
+                    onClick={handleRemoveFromHRShortlist}
+                    disabled={isEvaluatingFinal}
+                    size="sm"
+                    variant="outline"
+                    className="w-full text-xs h-8 gap-1.5 border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400 font-semibold"
+                  >
+                    <UserXIcon className="size-3.5" />
+                    Deny Shortlist / Remove from HR
+                  </Button>
+                ) : (
+                  <Button
+                    onClick={handleShortlistForHR}
+                    disabled={isEvaluatingFinal}
+                    size="sm"
+                    className="w-full text-xs h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold"
+                  >
+                    <UserCheckIcon className="size-3.5" />
+                    Pre-select for HR Interview
+                  </Button>
+                )}
+
+                {application.status === "hr_shortlisted" && (
+                  <div className="mt-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 space-y-2">
+                    <div className="flex items-center gap-1.5 text-xs font-bold text-emerald-400">
+                      <UserCheckIcon className="size-4" /> Pre-selected for HR Interview
+                    </div>
+                    <p className="text-[11px] text-muted-foreground leading-relaxed">
+                      This candidate has been evaluated and pre-selected by HR for a final interview.
+                    </p>
+                    <Button
+                      onClick={() => openScheduleDialog(`Executive HR Interview - ${application.position}`)}
+                      size="sm"
+                      className="w-full text-xs h-8 gap-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold shadow-md"
+                    >
+                      <CalendarIcon className="size-3.5" />
+                      Invite to HR Interview
+                    </Button>
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>

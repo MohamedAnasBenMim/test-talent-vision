@@ -9,7 +9,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Card } from "@/components/ui/card";
 import { sendApplicationConfirmationEmail } from "@/actions/application.actions";
-import { autoSendTechnicalInterviewInvite } from "@/actions/auto-invite.actions";
 import { cn } from "@/lib/utils";
 import {
   BriefcaseBusinessIcon,
@@ -28,7 +27,6 @@ import toast from "react-hot-toast";
 
 const MAX_CV_SIZE = 10 * 1024 * 1024;
 const ACCEPTED_CV_EXTENSIONS = [".pdf", ".doc", ".docx"];
-const AUTO_TECHNICAL_INVITE_EMAIL = "medanasbenmim123@gmail.com";
 
 type ApplicationFormProps = {
   jobId?: string;
@@ -162,22 +160,6 @@ export default function ApplicationForm({
       } catch (emailError) {
         console.error(emailError);
         toast.error("Application submitted, but confirmation email was not sent.");
-      }
-
-      if (submittedEmail === AUTO_TECHNICAL_INVITE_EMAIL) {
-        try {
-          const result = await autoSendTechnicalInterviewInvite({
-            applicationId,
-            appOrigin: window.location.origin,
-          });
-
-          if (result.sent) {
-            toast.success("Technical interview invitation sent");
-          }
-        } catch (autoInviteError) {
-          console.error(autoInviteError);
-          toast.error("Application submitted, but technical interview invitation was not sent.");
-        }
       }
 
       setSubmittedId(applicationId);

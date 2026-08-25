@@ -35,6 +35,7 @@ import {
   SparklesIcon,
   TrophyIcon,
   UserCheckIcon,
+  UserXIcon,
 } from "lucide-react";
 import Link from "next/link";
 import { useState, useMemo } from "react";
@@ -46,8 +47,18 @@ export default function ApplicationsDashboard() {
   const applications = useQuery(api.applications.getApplications);
   const updateCandidateFinalEvaluation = useMutation(api.applications.updateCandidateFinalEvaluation);
   const [searchTerm, setSearchTerm] = useState("");
-  const [activeFilter, setActiveFilter] = useState<"all" | "hr_shortlist" | "tech_passed" | "high_cv">("all");
+  const [isPreselectedOnly, setIsPreselectedOnly] = useState(false);
   const [sortBy, setSortBy] = useState<SortOption>("finalScore");
+
+  const preselectedCount = useMemo(() => {
+    if (!applications) return 0;
+    return applications.filter(
+      (app) =>
+        app.status === "hr_shortlisted" ||
+        app.finalRecommendation === "strong_recommend_hr" ||
+        app.finalRecommendation === "recommend_hr"
+    ).length;
+  }, [applications]);
 
   const filteredApplications = useMemo(() => {
     if (!applications) return [];
@@ -62,16 +73,14 @@ export default function ApplicationsDashboard() {
 
       if (!matchesSearch) return false;
 
-      // Status tab filter
-      if (activeFilter === "hr_shortlist") {
+      // Status toggle filter
+      if (isPreselectedOnly) {
         return (
           app.status === "hr_shortlisted" ||
           app.finalRecommendation === "strong_recommend_hr" ||
           app.finalRecommendation === "recommend_hr"
         );
       }
-      if (activeFilter === "tech_passed") return app.status === "technical_passed";
-      if (activeFilter === "high_cv") return (app.cvScore ?? app.aiScore ?? 0) >= 80;
 
       return true;
     });
@@ -98,17 +107,34 @@ export default function ApplicationsDashboard() {
       }
       return 0;
     });
-  }, [applications, searchTerm, activeFilter, sortBy]);
+  }, [applications, searchTerm, isPreselectedOnly, sortBy]);
 
   const handleQuickShortlist = async (appId: string) => {
     try {
       await updateCandidateFinalEvaluation({
         id: appId as any,
         status: "hr_shortlisted",
+        finalRecommendation: "strong_recommend_hr",
       });
       toast.success("Candidate shortlisted for HR Interview!");
-    } catch {
-      toast.error("Failed to shortlist candidate");
+    } catch (error: any) {
+      console.error("Shortlist error:", error);
+      toast.error(error?.message || "Failed to shortlist candidate");
+    }
+  };
+
+  const handleRemoveShortlist = async (app: any) => {
+    try {
+      const targetStatus = typeof app.technicalScore === "number" ? "technical_passed" : "submitted";
+      await updateCandidateFinalEvaluation({
+        id: app._id as any,
+        status: targetStatus,
+        finalRecommendation: "reconsider_hr",
+      });
+      toast.success(`Removed ${app.fullName} from HR shortlist`);
+    } catch (error: any) {
+      console.error("Remove shortlist error:", error);
+      toast.error(error?.message || "Failed to update candidate status");
     }
   };
 
@@ -165,38 +191,14 @@ export default function ApplicationsDashboard() {
           </div>
 
           {/* Filter Buttons */}
-          <div className="flex flex-wrap items-center gap-1.5 bg-secondary/40 p-1 rounded-lg">
+          <div className="flex flex-wrap items-center gap-1.5">
             <Button
               size="sm"
-              className="h-7 text-xs"
-              variant={activeFilter === "all" ? "default" : "ghost"}
-              onClick={() => setActiveFilter("all")}
+              className="h-8 text-xs gap-1.5 transition-all cursor-pointer shadow-xs"
+              variant={isPreselectedOnly ? "default" : "outline"}
+              onClick={() => setIsPreselectedOnly((prev) => !prev)}
             >
-              All ({applications.length})
-            </Button>
-            <Button
-              size="sm"
-              className="h-7 text-xs gap-1"
-              variant={activeFilter === "hr_shortlist" ? "default" : "ghost"}
-              onClick={() => setActiveFilter("hr_shortlist")}
-            >
-              ⭐ HR Shortlist
-            </Button>
-            <Button
-              size="sm"
-              className="h-7 text-xs"
-              variant={activeFilter === "tech_passed" ? "default" : "ghost"}
-              onClick={() => setActiveFilter("tech_passed")}
-            >
-              💻 Tech Passed
-            </Button>
-            <Button
-              size="sm"
-              className="h-7 text-xs"
-              variant={activeFilter === "high_cv" ? "default" : "ghost"}
-              onClick={() => setActiveFilter("high_cv")}
-            >
-              📄 High CV Match
+              🎯 Pre-selected HR ({preselectedCount})
             </Button>
           </div>
         </div>
@@ -306,11 +308,21 @@ export default function ApplicationsDashboard() {
                         {/* Action */}
                         <td className="px-5 py-4 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            {app.status !== "hr_shortlisted" && (
+                            {app.status === "hr_shortlisted" || app.finalRecommendation === "strong_recommend_hr" || app.finalRecommendation === "recommend_hr" ? (
                               <Button
                                 size="sm"
                                 variant="outline"
-                                className="h-8 text-xs gap-1 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10"
+                                className="h-8 text-xs gap-1 border-rose-500/30 text-rose-600 hover:bg-rose-500/10 dark:text-rose-400"
+                                onClick={() => handleRemoveShortlist(app)}
+                                title="Deny shortlist / Remove from Pre-selected HR"
+                              >
+                                <UserXIcon className="size-3.5" /> Deny Shortlist
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                className="h-8 text-xs gap-1 border-emerald-500/30 text-emerald-600 hover:bg-emerald-500/10 dark:text-emerald-400"
                                 onClick={() => handleQuickShortlist(app._id)}
                                 title="Shortlist for HR Interview"
                               >
