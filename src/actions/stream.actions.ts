@@ -28,6 +28,12 @@ export const streamTokenProvider = async () => {
   return streamClient.generateUserToken({ user_id: user.id });
 };
 
+export const streamGuestTokenProvider = async (guestId: string) => {
+  if (!guestId) throw new Error("Guest ID is missing");
+  const streamClient = getStreamClient();
+  return streamClient.generateUserToken({ user_id: guestId });
+};
+
 export async function createStreamInterviewCall({
   callId,
   title,
