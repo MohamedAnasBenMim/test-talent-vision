@@ -61,7 +61,7 @@ export const getInterviewByApplicationId = query({
   args: { applicationId: v.id("applications") },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthorized");
+    if (!identity) return null;
 
     return await ctx.db
       .query("interviews")

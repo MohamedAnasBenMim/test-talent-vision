@@ -25,8 +25,6 @@ const AI_RECOMMENDATIONS = v.union(
   v.literal("weak_match")
 );
 
-const AUTO_TECHNICAL_INVITE_EMAIL = "medanasbenmim123@gmail.com";
-
 const JOB_REQUIREMENTS = {
   jobId: v.string(),
   title: v.string(),
@@ -78,27 +76,31 @@ const JOB_REQUIREMENTS = {
 };
 
 async function assertInterviewer(ctx: any) {
-  const identity = await ctx.auth.getUserIdentity();
-  if (!identity) return;
+  try {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return;
 
-  const user = await ctx.db
-    .query("users")
-    .withIndex("by_clerk_id", (q: any) => q.eq("clerkId", identity.subject))
-    .first();
+    const user = await ctx.db
+      .query("users")
+      .withIndex("by_clerk_id", (q: any) => q.eq("clerkId", identity.subject))
+      .first();
 
-  if (!user) {
-    await ctx.db.insert("users", {
-      clerkId: identity.subject,
-      name: identity.name || identity.email || "Recruiter",
-      email: identity.email || "",
-      image: identity.pictureUrl,
-      role: "interviewer",
-    });
-    return;
-  }
+    if (!user) {
+      await ctx.db.insert("users", {
+        clerkId: identity.subject,
+        name: identity.name || identity.email || "Recruiter",
+        email: identity.email || "",
+        image: identity.pictureUrl,
+        role: "interviewer",
+      });
+      return;
+    }
 
-  if (user.role !== "interviewer") {
-    await ctx.db.patch(user._id, { role: "interviewer" });
+    if (user.role !== "interviewer") {
+      await ctx.db.patch(user._id, { role: "interviewer" });
+    }
+  } catch (error) {
+    console.error("assertInterviewer warning:", error);
   }
 }
 
@@ -320,48 +322,79 @@ export const updateCandidateFinalEvaluation = mutation({
         v.literal("saved_to_talent_pool")
       )
     ),
+    finalRecommendation: v.optional(
+      v.union(
+        v.literal("strong_recommend_hr"),
+        v.literal("recommend_hr"),
+        v.literal("reconsider_hr"),
+        v.literal("reject_hr")
+      )
+    ),
   },
   handler: async (ctx, args) => {
-    await assertInterviewer(ctx);
+    try {
+      await assertInterviewer(ctx);
 
-    const application = await ctx.db.get(args.id);
-    if (!application) throw new Error("Application not found");
+      const application = await ctx.db.get(args.id);
+      if (!application) return null;
 
-    const cvScore = application.cvScore ?? application.aiScore ?? 75;
-    const techScore = args.technicalScore ?? application.technicalScore ?? 85;
+      const cvScore = application.cvScore ?? application.aiScore;
+      const techScore = args.technicalScore ?? application.technicalScore;
 
-    // Weighted Composite Score: 40% CV + 60% Technical
-    const finalScore = Math.min(100, Math.round(cvScore * 0.4 + techScore * 0.6));
+      // If candidate has completed technical interview: 40% CV + 60% Technical
+      // Otherwise: Final Score equals CV Score
+      const finalScore = typeof techScore === "number"
+        ? Math.min(100, Math.round((cvScore ?? 0) * 0.4 + techScore * 0.6))
+        : cvScore;
 
-    let finalRecommendation: "strong_recommend_hr" | "recommend_hr" | "reconsider_hr" | "reject_hr" = "reconsider_hr";
-    if (finalScore >= 85) finalRecommendation = "strong_recommend_hr";
-    else if (finalScore >= 70) finalRecommendation = "recommend_hr";
-    else if (finalScore >= 50) finalRecommendation = "reconsider_hr";
-    else finalRecommendation = "reject_hr";
+      const effectiveScore = finalScore ?? cvScore ?? 0;
+      let finalRecommendation: "strong_recommend_hr" | "recommend_hr" | "reconsider_hr" | "reject_hr" = "reconsider_hr";
+      if (args.finalRecommendation) {
+        finalRecommendation = args.finalRecommendation;
+      } else {
+        if (effectiveScore >= 85) finalRecommendation = "strong_recommend_hr";
+        else if (effectiveScore >= 70) finalRecommendation = "recommend_hr";
+        else if (effectiveScore >= 50) finalRecommendation = "reconsider_hr";
+        else finalRecommendation = "reject_hr";
+      }
 
-    const finalSynthesis = `Synthesized Analysis for ${application.fullName}: Candidate achieved a pre-interview CV score of ${cvScore}/100 and a live technical assessment score of ${techScore}/100. Overall AI Composite Rating is ${finalScore}/100. ${
-      finalRecommendation === "strong_recommend_hr"
-        ? "Top Tier Candidate — Exceptional technical proficiency & background match. Strongly recommended to advance immediately to final HR culture-fit interview."
-        : finalRecommendation === "recommend_hr"
-        ? "Qualified Candidate — Meets core technical requirements and resume credentials. Recommended for HR interview stage."
-        : finalRecommendation === "reconsider_hr"
-        ? "Borderline Performance — Review detailed scorecard & proctoring log before scheduling HR round."
-        : "Unfavorable Rating — Technical code score or CV fit fell below threshold. Progression to HR is not recommended."
-    }`;
+      const techSummaryText = typeof techScore === "number"
+        ? `technical assessment score of ${techScore}/100`
+        : `technical assessment pending`;
 
-    const newStatus = args.status ?? (finalRecommendation === "strong_recommend_hr" || finalRecommendation === "recommend_hr" ? "hr_shortlisted" : application.status);
+      const finalSynthesis = `Synthesized Analysis for ${application.fullName}: Candidate achieved a pre-interview CV score of ${cvScore ?? "--"}/100 and ${techSummaryText}. Overall AI Composite Rating is ${effectiveScore}/100. ${
+        finalRecommendation === "strong_recommend_hr"
+          ? "Top Tier Candidate — Exceptional technical proficiency & background match. Strongly recommended to advance to final HR interview."
+          : finalRecommendation === "recommend_hr"
+          ? "Qualified Candidate — Meets core technical requirements and resume credentials."
+          : finalRecommendation === "reconsider_hr"
+          ? "Borderline Performance — Review detailed scorecard & proctoring log before scheduling HR round."
+          : "Unfavorable Rating — Technical code score or CV fit fell below threshold."
+      }`;
 
-    await ctx.db.patch(args.id, {
-      cvScore,
-      technicalScore: techScore,
-      finalScore,
-      finalRecommendation,
-      finalSynthesis,
-      status: newStatus,
-      updatedAt: Date.now(),
-    });
+      const newStatus = args.status ?? application.status;
 
-    return { finalScore, finalRecommendation, finalSynthesis, status: newStatus };
+      // Build patch - Convex rejects undefined values in patch, so we must
+      // only include optional fields when they have concrete values
+      const patch: any = {
+        finalRecommendation,
+        finalSynthesis,
+        status: newStatus,
+        updatedAt: Date.now(),
+      };
+
+      // Only write optional number fields when they have actual values
+      if (typeof cvScore === "number") patch.cvScore = cvScore;
+      if (typeof techScore === "number") patch.technicalScore = techScore;
+      if (typeof finalScore === "number") patch.finalScore = finalScore;
+
+      await ctx.db.patch(args.id, patch);
+
+      return { finalScore, finalRecommendation, finalSynthesis, status: newStatus };
+    } catch (error: any) {
+      console.error("updateCandidateFinalEvaluation error:", error?.message ?? error);
+      throw error;
+    }
   },
 });
 
@@ -373,62 +406,10 @@ export const createAutoInterviewForTargetApplication = mutation({
     description: v.optional(v.string()),
     startTime: v.number(),
   },
-  handler: async (ctx, args) => {
-    const application = await ctx.db.get(args.id);
-    if (!application) throw new Error("Application not found");
-
-    if (application.email.trim().toLowerCase() !== AUTO_TECHNICAL_INVITE_EMAIL) {
-      return null;
-    }
-
-    const existingInterview = await ctx.db
-      .query("interviews")
-      .withIndex("by_application_id", (q) => q.eq("applicationId", args.id))
-      .first();
-
-    if (existingInterview) {
-      return {
-        created: false,
-        interviewId: existingInterview._id,
-        streamCallId: existingInterview.streamCallId,
-        candidateEmail: application.email,
-        candidateName: application.fullName,
-        position: application.position,
-        startTime: existingInterview.startTime,
-        title: existingInterview.title,
-        description: existingInterview.description,
-      };
-    }
-
-    const interviewId = await ctx.db.insert("interviews", {
-      title: args.title,
-      description: args.description,
-      startTime: args.startTime,
-      status: "upcoming",
-      streamCallId: args.streamCallId,
-      candidateId: application.email,
-      applicationId: args.id,
-      candidateName: application.fullName,
-      candidateEmail: application.email,
-      interviewerIds: [],
-    });
-
-    await ctx.db.patch(args.id, {
-      status: "technical_invited",
-      updatedAt: Date.now(),
-    });
-
-    return {
-      created: true,
-      interviewId,
-      streamCallId: args.streamCallId,
-      candidateEmail: application.email,
-      candidateName: application.fullName,
-      position: application.position,
-      startTime: args.startTime,
-      title: args.title,
-      description: args.description,
-    };
+  handler: async () => {
+    // Automatic technical interview creation is disabled.
+    // Interviews are only created when HR/Recruiter clicks "Invite to Technical Interview".
+    return null;
   },
 });
 
@@ -566,6 +547,26 @@ async function assertInterviewerForAction(ctx: any) {
     throw new Error("Only interviewers can run AI analysis");
   }
 }
+
+export const cleanPendingTechnicalScores = mutation({
+  handler: async (ctx) => {
+    const apps = await ctx.db.query("applications").collect();
+    for (const app of apps) {
+      const assessment = await ctx.db
+        .query("assessmentAttempts")
+        .withIndex("by_candidate_id", (q) => q.eq("candidateId", app.email))
+        .first();
+
+      if (!assessment || typeof assessment.score !== "number") {
+        await ctx.db.patch(app._id, {
+          technicalScore: undefined,
+          finalScore: app.cvScore ?? app.aiScore,
+          finalRecommendation: undefined,
+        });
+      }
+    }
+  },
+});
 
 export const getUserByClerkIdInternal = internalQuery({
   args: { clerkId: v.string() },

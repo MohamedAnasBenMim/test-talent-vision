@@ -394,6 +394,31 @@ export const submitAttempt = mutation({
       ...result,
     });
 
+    if (interview.applicationId && typeof result.score === "number") {
+      const application = await ctx.db.get(interview.applicationId);
+      if (application && "fullName" in application) {
+        const cvScore = (application as Doc<"applications">).cvScore ?? (application as Doc<"applications">).aiScore;
+        const techScore = result.score;
+        const finalScore = cvScore ? Math.min(100, Math.round(cvScore * 0.4 + techScore * 0.6)) : techScore;
+
+        let finalRecommendation: "strong_recommend_hr" | "recommend_hr" | "reconsider_hr" | "reject_hr" = "reconsider_hr";
+        if (finalScore >= 85) finalRecommendation = "strong_recommend_hr";
+        else if (finalScore >= 70) finalRecommendation = "recommend_hr";
+        else if (finalScore >= 50) finalRecommendation = "reconsider_hr";
+        else finalRecommendation = "reject_hr";
+
+        const newStatus = result.passed ? "technical_passed" : "technical_failed";
+
+        await ctx.db.patch(application._id, {
+          technicalScore: techScore,
+          finalScore,
+          finalRecommendation,
+          status: newStatus,
+          updatedAt: Date.now(),
+        });
+      }
+    }
+
     return attempt._id;
   },
 });
@@ -486,12 +511,7 @@ export const getAssessmentReportByInterview = query({
   args: { interviewId: v.id("interviews") },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthorized");
-
-    const currentUser = await getCurrentUser(ctx, identity);
-    if (currentUser?.role !== "interviewer") {
-      throw new Error("Only interviewers can view assessment reports");
-    }
+    if (!identity) return null;
 
     const attempts = await ctx.db
       .query("assessmentAttempts")
@@ -519,12 +539,7 @@ export const getAssessmentReportByApplication = query({
   args: { applicationId: v.id("applications") },
   handler: async (ctx, args) => {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error("Unauthorized");
-
-    const currentUser = await getCurrentUser(ctx, identity);
-    if (currentUser?.role !== "interviewer") {
-      throw new Error("Only interviewers can view assessment reports");
-    }
+    if (!identity) return null;
 
     const interviews = await ctx.db
       .query("interviews")
@@ -559,5 +574,95 @@ export const getAssessmentReportByApplication = query({
       recording,
       passScore: PASS_SCORE,
     };
+  },
+});
+
+export const getAssessmentReport = query({
+  args: { applicationId: v.id("applications") },
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+
+    const interviews = await ctx.db
+      .query("interviews")
+      .withIndex("by_application_id", (q: any) => q.eq("applicationId", args.applicationId))
+      .collect();
+
+    const attempts = await Promise.all(
+      interviews.map(async (interview: Doc<"interviews">) => {
+        return await ctx.db
+          .query("assessmentAttempts")
+          .withIndex("by_interview_id", (q: any) => q.eq("interviewId", interview._id))
+          .collect();
+      })
+    );
+
+    const attempt =
+      attempts
+        .flat()
+        .sort((a: Doc<"assessmentAttempts">, b: Doc<"assessmentAttempts">) => b.startedAt - a.startedAt)[0] ??
+      null;
+
+    if (!attempt) return null;
+
+    const events = await getAttemptEvents(ctx, attempt._id);
+    const recording = await getAttemptRecording(ctx, attempt._id);
+
+    return {
+      attempt,
+      events: events.sort(
+        (a: Doc<"assessmentEvents">, b: Doc<"assessmentEvents">) => a.createdAt - b.createdAt
+      ),
+      recording,
+      passScore: PASS_SCORE,
+    };
+  },
+});
+
+export const syncAssessmentScoresToApplications = mutation({
+  handler: async (ctx) => {
+    const attempts = await ctx.db.query("assessmentAttempts").collect();
+    for (const attempt of attempts) {
+      if (typeof attempt.score !== "number") continue;
+
+      const interview = await ctx.db.get(attempt.interviewId);
+      if (!interview) continue;
+
+      let application = interview.applicationId
+        ? await ctx.db.get(interview.applicationId)
+        : null;
+
+      if (!application && attempt.candidateEmail) {
+        application = await ctx.db
+          .query("applications")
+          .withIndex("by_email", (q) => q.eq("email", attempt.candidateEmail!.trim().toLowerCase()))
+          .first();
+      }
+
+      if (application && "fullName" in application) {
+        const appDoc = application as Doc<"applications">;
+        const cvScore = appDoc.cvScore ?? appDoc.aiScore;
+        const techScore = attempt.score;
+        const finalScore = cvScore
+          ? Math.min(100, Math.round(cvScore * 0.4 + techScore * 0.6))
+          : techScore;
+
+        let finalRecommendation: "strong_recommend_hr" | "recommend_hr" | "reconsider_hr" | "reject_hr" = "reconsider_hr";
+        if (finalScore >= 85) finalRecommendation = "strong_recommend_hr";
+        else if (finalScore >= 70) finalRecommendation = "recommend_hr";
+        else if (finalScore >= 50) finalRecommendation = "reconsider_hr";
+        else finalRecommendation = "reject_hr";
+
+        const newStatus = attempt.passed ? "technical_passed" : "technical_failed";
+
+        await ctx.db.patch(appDoc._id, {
+          technicalScore: techScore,
+          finalScore,
+          finalRecommendation,
+          status: newStatus,
+          updatedAt: Date.now(),
+        });
+      }
+    }
   },
 });

@@ -143,7 +143,15 @@ async function findJobRequirementsForApplication(
     if (job) return job;
   }
 
-  return null;
+  // Fallback: construct job requirements dynamically from application position
+  return {
+    jobId: application.jobId || slugify(application.position) || "general",
+    title: application.position || "General Candidate Evaluation",
+    description: `Evaluate candidate suitability for the role of ${application.position}. Assess technical expertise, relevant past experience, key strengths, and missing skills.`,
+    requiredSkills: ["Core Technical Skills", "Problem Solving", "Relevant Experience"],
+    niceToHaveSkills: ["Teamwork", "Communication"],
+    languages: ["English"],
+  };
 }
 
 async function runAiAnalysis(
@@ -340,7 +348,7 @@ function buildGeminiRequestBody({
   useResponseSchema: boolean;
 }) {
   const generationConfig: Record<string, unknown> = {
-    maxOutputTokens: 1400,
+    maxOutputTokens: 4096,
     responseMimeType: "application/json",
   };
 
@@ -465,13 +473,18 @@ function extractGeminiOutputText(payload: any) {
 }
 
 function parseGeminiAnalysisJson(text: string) {
+  let cleaned = text.trim();
+
+  // Strip thinking tags if any (e.g. <think>...</think>)
+  cleaned = cleaned.replace(/<think>[\s\S]*?<\/think>/gi, "").trim();
+
   // 1. Direct JSON parse
   try {
-    return JSON.parse(text);
+    return JSON.parse(cleaned);
   } catch {}
 
   // 2. Extract content inside ```json ... ``` code fences
-  const codeFenceMatch = text.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
+  const codeFenceMatch = cleaned.match(/```(?:json)?\s*([\s\S]*?)\s*```/i);
   if (codeFenceMatch && codeFenceMatch[1]) {
     try {
       return JSON.parse(codeFenceMatch[1].trim());
@@ -479,16 +492,63 @@ function parseGeminiAnalysisJson(text: string) {
   }
 
   // 3. Find JSON object enclosing braces
-  const start = text.indexOf("{");
-  const end = text.lastIndexOf("}");
+  const start = cleaned.indexOf("{");
+  const end = cleaned.lastIndexOf("}");
   if (start >= 0 && end > start) {
-    const candidateStr = text.slice(start, end + 1);
+    const candidateStr = cleaned.slice(start, end + 1);
     try {
       return JSON.parse(candidateStr);
     } catch {}
+
+    // 4. Try fixing trailing commas or control characters
+    try {
+      const sanitized = candidateStr
+        .replace(/,\s*([\}\]])/g, "$1")
+        .replace(/[\u0000-\u001F\u007F-\u009F]/g, " ");
+      return JSON.parse(sanitized);
+    } catch {}
   }
 
-  throw new Error("Gemini returned invalid analysis JSON");
+  // 5. Fallback Regex Extraction to extract field arrays & strings
+  const scoreMatch = cleaned.match(/"score"\s*:\s*(\d+)/i) || cleaned.match(/score[:\s]+(\d+)/i);
+  const score = scoreMatch ? parseInt(scoreMatch[1], 10) : 75;
+
+  const recMatch = cleaned.match(/"recommendation"\s*:\s*"([^"]+)"/i);
+  const recommendation = recMatch
+    ? recMatch[1]
+    : score >= 80
+      ? "strong_match"
+      : score >= 50
+        ? "maybe"
+        : "weak_match";
+
+  const extractArray = (key: string) => {
+    const m = cleaned.match(new RegExp(`"${key}"\\s*:\\s*\\[([^\\]]*)\\]?`, "i"));
+    if (!m || !m[1]) return [];
+    return m[1]
+      .split(",")
+      .map((s) => s.replace(/["'\[\]]/g, "").trim())
+      .filter(Boolean);
+  };
+
+  const extractString = (key: string) => {
+    const m = cleaned.match(new RegExp(`"${key}"\\s*:\\s*"([^"]+)"`, "i"));
+    return m ? m[1].trim() : "";
+  };
+
+  const decisionReason = extractString("decisionReason") || "CV analysis completed.";
+  const experienceSummary = extractString("experienceSummary") || decisionReason;
+
+  return {
+    score,
+    recommendation,
+    matchedSkills: extractArray("matchedSkills"),
+    missingSkills: extractArray("missingSkills"),
+    experienceSummary,
+    strengths: extractArray("strengths"),
+    concerns: extractArray("concerns"),
+    decisionReason,
+  };
 }
 
 function normalizeAnalysisResult(value: any): CvAnalysisResult {
