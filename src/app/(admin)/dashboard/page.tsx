@@ -25,8 +25,8 @@ import {
   UsersIcon,
 } from "lucide-react";
 import { format } from "date-fns";
-import CommentDialog from "@/components/CommentDialog";
 import useMeetingActions from "@/hooks/useMeetingActions";
+import InterviewRecordingModal from "@/components/InterviewRecordingModal";
 import { useEffect, useState } from "react";
 
 type Interview = Doc<"interviews">;
@@ -83,7 +83,7 @@ function DashboardPage() {
             Interviews
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Manage technical interview calls, join live sessions, and submit evaluation scorecards.
+            Complete history of candidate interviews, live sessions, and scheduled calls.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -208,27 +208,25 @@ function DashboardPage() {
                             )}
 
                             {interview.status === "completed" && (
-                              <div className="flex gap-2 w-full">
-                                <Button
-                                  size="sm"
-                                  className="flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"
-                                  onClick={() => handleStatusUpdate(interview._id, "succeeded")}
-                                >
-                                  <CheckCircle2Icon className="size-4 mr-1.5" />
-                                  Pass
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  className="flex-1"
-                                  onClick={() => handleStatusUpdate(interview._id, "failed")}
-                                >
-                                  <XCircleIcon className="size-4 mr-1.5" />
-                                  Fail
-                                </Button>
+                              <div className="space-y-2 w-full">
+                                <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-muted-foreground w-full py-1">
+                                  <CheckCircle2Icon className="size-4 text-emerald-400" />
+                                  Completed Interview Record
+                                </div>
+                                <InterviewRecordingModal
+                                  interviewId={interview._id}
+                                  candidateName={candidateInfo.name}
+                                  title={interview.title}
+                                />
                               </div>
                             )}
-                            <CommentDialog interviewId={interview._id} />
+                            {interview.status !== "completed" && (
+                              <InterviewRecordingModal
+                                interviewId={interview._id}
+                                candidateName={candidateInfo.name}
+                                title={interview.title}
+                              />
+                            )}
                           </CardFooter>
                         </Card>
                       );
