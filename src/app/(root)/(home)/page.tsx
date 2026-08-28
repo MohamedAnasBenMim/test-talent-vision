@@ -9,6 +9,7 @@ import { api } from "../../../../convex/_generated/api";
 import { useRouter } from "next/navigation";
 import MeetingModal from "@/components/MeetingModal";
 import LoaderUI from "@/components/LoaderUI";
+import RoleSwitcher from "@/components/RoleSwitcher";
 import {
   CalendarXIcon,
   BriefcaseIcon,
@@ -144,15 +145,21 @@ export default function Home() {
 
     return (
       <div className="container mx-auto flex min-h-[calc(100vh-6rem)] max-w-3xl items-center justify-center p-6">
-        <section className="w-full rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
+        <section className="w-full rounded-2xl border border-border bg-card p-8 text-center shadow-sm space-y-5">
           <div className="mx-auto flex size-14 items-center justify-center rounded-2xl bg-primary/10 text-primary">
             <CalendarXIcon className="size-7" />
           </div>
-          <h1 className="mt-5 text-2xl font-bold tracking-tight">No Active Interview Invitation</h1>
-          <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
-            You do not have an active technical interview yet. When an interviewer sends you an
-            invitation link, open it to take your assessment.
-          </p>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">No Active Interview Invitation</h1>
+            <p className="mx-auto mt-2 max-w-md text-sm leading-6 text-muted-foreground">
+              You do not have an active technical interview yet. When an interviewer sends you an
+              invitation link, open it to take your assessment.
+            </p>
+          </div>
+          <div className="pt-4 border-t border-border/60 flex flex-col items-center gap-3">
+            <p className="text-xs text-muted-foreground font-medium">Are you an interviewer or recruiter?</p>
+            <RoleSwitcher />
+          </div>
         </section>
       </div>
     );

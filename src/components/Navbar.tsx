@@ -2,6 +2,7 @@ import Link from "next/link";
 import { ModeToggle } from "./ModeToggle";
 import { SignedIn, UserButton } from "@clerk/nextjs";
 import DasboardBtn from "./DasboardBtn";
+import RoleSwitcher from "./RoleSwitcher";
 import BrandMark from "./BrandMark";
 import { SparklesIcon } from "lucide-react";
 
@@ -30,6 +31,7 @@ function Navbar() {
               <SparklesIcon className="size-3.5" />
               Super Recruiter Suite
             </span>
+            <RoleSwitcher />
             <DasboardBtn />
             <ModeToggle />
             <UserButton />
